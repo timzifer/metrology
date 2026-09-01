@@ -926,6 +926,10 @@ at minimum:
   scale. The text form cannot carry a tag of its own (section 8), so the spelling
   decides — which is a v1 question rather than a later one.
 - `O1` in section 10, which decides whether `imperial` is a subpackage or a module
+- `O2` in section 10, which decides whether the arithmetic is a type parameter of
+  `Measurement`. It is the one open question that cannot be deferred past
+  `v1.0.0`: parameterising the core later renames every type in the API, and
+  the recommendation is precisely not to
 
 `cmd/unitvet` is versioned with the library but breaks nothing on its own: it is
 additive, opt-in, and can ship a new version independently.
@@ -951,7 +955,7 @@ additive, opt-in, and can ship a new version independently.
 | Risk | Mitigation |
 |---|---|
 | The aliasing invariant breaks unnoticed | It is the one rule whose violation causes silent data corruption. Hence the dedicated guard test of D3, using values above 38 digits — below that threshold apd/v3 masks the bug. |
-| Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it. If it binds, the escape is a fast path for values that fit losslessly in `int64` — not a return to `float64`. |
+| Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it, and why `BenchmarkKernel` measures that boundary as faster than any arithmetic swapped in behind it (O2). If it binds, the escape is a fast path for values that fit losslessly in `int64` — not a return to `float64`, which O2 measures as slower than the boundary it would replace. |
 | Kind semantics proliferate | Every new kind needs a justification in the catalogue. No dimension collision and no affinity, no kind. |
 | `unitvet` produces a false positive | The one failure mode that kills the tool, because users disable it and then get nothing. Every rule must be provable before it reports; `analysistest` asserts the silent cases as explicitly as the reported ones. Prefer missing a real bug over inventing one. |
 | `unitvet` drifts from the library | Prevented by construction: its dimension table is generated from the catalogue of D8, in the same `go generate` run. A hand-maintained second table would be the defect waiting to happen. |
@@ -983,6 +987,96 @@ distinction visible is worth doing. A subpackage with its own catalogue file and
 its own source column achieves it without a second module path, a second release
 cadence and a second CI pipeline.
 
+### O2 — A fast mode: the arithmetic as a facade?
+
+**Status:** open, with a recommendation; decide before `v1.0.0`
+
+The proposal: hand the arithmetic in from outside. `apd.Decimal` by default, and
+where a simulation wants speed over exactness, a float-backed implementation
+passed in its place — as an interface, or as a type parameter of `Measurement`.
+
+Everything below was measured, on `bench_test.go` and on prototypes of each
+shape; the numbers are in section 11. `BenchmarkKernel` was added for this
+question and stays, because it is the comparison a reader will want to repeat
+before asking it again.
+
+**A fast mode is a change of representation, not a change of operations.** This
+is the finding that settles most of the question. Take the proposal literally —
+keep `val apd.Decimal` in the struct and swap the operations behind a facade —
+and the float backend has to unpack a decimal, compute, and pack a decimal
+again. That costs **327 ns against the 44 ns of the decimal multiplication it
+replaces**: the fast arithmetic is seven times slower than the exact arithmetic
+it was brought in to avoid. A facade over the operations cannot be fast, in any
+of its spellings, because the representation is where the time is.
+
+What *is* fast is a type parameter, because it changes the storage: a magnitude
+held as `float64` behind a `Backend[V]` constraint multiplies in **1.6 ns with no
+allocation**, and Go 1.27 does permit the generic method of D10 on such a type
+(verified, section 11). The interface spelling of the same idea — a magnitude
+behind a `Value` interface — costs 18 ns and one allocation per operation, which
+is D1's boxing argument in this exact setting.
+
+**What the type parameter costs the rest of the design.** `Measurement[V, B]`
+does not stay in `measurement.go`:
+
+- **The catalogue instantiates.** The 82 units of section 6 are package-level
+  `var`s of type `metrology.Unit` across 43 quantity packages (D7, D8). Generic,
+  each of them is *one* instantiation, so a second backend needs a second set —
+  the generator emits every quantity package twice, or the fast units are
+  converted from the exact ones at run time. If it is conversion, the type
+  parameter bought nothing a separate type would not have given.
+- **`parse` instantiates with it.** `parse.Text` embeds `metrology.Measurement`
+  and `parse.Measurement(text)` returns one, so both become generic and both
+  have to pick a backend at the package-level entry points of D12.
+- **`unitvet` resolves by type name.** The pass looks `Measurement`, `Unit` and
+  `Engine` up in the core's scope and compares receiver types; with a generic
+  receiver every one of those is an instantiation needing `Origin()`
+  normalisation. Section 11 already records an hour lost to exactly that class
+  of bug with `Of[float64]`, and that was for a method alone.
+- **Every user signature instantiates.** `func f(m metrology.Measurement)`
+  becomes a spelling with a backend in it. A generic alias hides the spelling,
+  not the fact that two backends are two types — which is D1's
+  heterogeneous-storage row a second time.
+
+**And the text form would stop being honest.** A float-backed magnitude marshals
+through the same `MarshalText` as an exact one. A thousand additions of 0.1 bar
+is `100.0 bar` in the core and `99.9999999999986 bar` in `float64`; both are
+well-formed text, both parse, and *nothing in the string says which engine
+produced it*. D12 makes text the exchange format, so an approximate value that
+carries no mark of its provenance is the failure mode the whole D2–D4 chain
+exists to prevent — arriving through the one door the design opened on purpose.
+
+**The workload measurement, which is what actually decides it.** A window of 64
+readings multiplied and summed:
+
+| Kernel | Time | Allocations |
+|---|---:|---:|
+| every intermediate a `Measurement` (`BenchmarkKernel/Exact`) | 58 900 ns | 769 |
+| a full fast mode (prototype: float magnitude, float unit) | 5 900 ns | 64 |
+| **units left at the boundary** (`BenchmarkKernel/Boundary`) | **849 ns** | **6** |
+
+The third row is principle 3 written out, it is available today through
+`In[float64]`, and it is **seven times faster than the fast mode** — because a
+fast mode still builds a result unit on every operation, while the boundary
+crosses twice for the whole loop. A fast mode is therefore not the fast option.
+It is the option that keeps the dimension check *inside* the loop, and that, not
+speed, is the only thing it sells.
+
+**Recommendation: do not parameterise the core.** Should the dimension check
+inside the loop turn out to be worth paying for, it belongs in a concrete type
+of its own — `metrology/fast`, built from catalogue units at the boundary, with
+no `MarshalText` and an explicitly named lossy readout. That shape costs the
+core nothing, needs no second catalogue, leaves `unitvet` and `parse` alone, and
+— being additive — can be decided *after* `v1.0.0`. Parameterising cannot: it
+renames every type in the API.
+
+**Where the exact core's own headroom is,** since the question was speed. Of the
+480 ns of a `Mul`, **229 ns and half the allocations are the unit half** — the
+exact multiplication of two factor fractions (D4), which `BenchmarkCompose/Times`
+measures on its own — against some 50 ns for the magnitude. That fraction is
+invariant across a loop and is rebuilt on every iteration anyway. Whatever the fix is, it is a larger factor than any backend
+swap, it keeps every digit, and it needs no decision recorded here.
+
 ---
 
 ## 11. Appendix: verification log
@@ -1000,6 +1094,7 @@ cd go/src && GOROOT_BOOTSTRAP=<go1.24+> ./make.bash
 | Construct | Result |
 |---|---|
 | `func (b Box[E]) Map[R any](f func(E) R) Box[R]` | compiles |
+| `func (u Unit[V, B]) Of[N Numeric](v N) Measurement[V, B]` — D10's generic method on a *generic* type, which O2 needs | compiles and runs |
 | `type I interface { M[T any](t T) }` | `interface method must have no type parameters` |
 | `map[int]slice` where `type slice[A any] []details[A]` | `cannot use generic type slice[A any] without instantiation` |
 | `var _ = Q[2, -1]{}` | `syntax error: unexpected -, expected ]` |
@@ -1045,6 +1140,51 @@ benchmark that fails is not a defect, and the correctness weight stays in the
 property, golden and guard tests of D14 — but they keep every runtime-cost claim
 in this document checkable on the reader's own machine, which is the only sense
 in which a quoted nanosecond figure is evidence at all.
+
+### Fast mode: where the time goes (O2)
+
+Same machine. **One multiplication of two magnitudes**, by where the value is
+held — this is the table that decides O2, because it separates changing the
+*operations* from changing the *representation*:
+
+| Magnitude held as | Time | Allocations |
+|---|---:|---:|
+| `apd.Decimal`, called directly (what the core does) | 44 ns | 1 |
+| `apd.Decimal` behind an interface facade, decimal backend | 44 ns | 1 |
+| `apd.Decimal` behind an interface facade, **`float64` backend** | 327 ns | 4 |
+| behind a `Value` interface, `float64` implementation | 18 ns | 1 |
+| a type parameter with an `apd` backend | 41 ns | 1 |
+| a type parameter with a `float64` backend | 1.6 ns | 0 |
+| plain `float64` | 0.6 ns | 0 |
+
+The third row is the proposal read literally, and it is seven times slower than
+the arithmetic it replaces: unpacking a decimal to a float and packing the
+result back costs more than multiplying the decimals. The float backend used
+apd's own `SetFloat64`, so this is not a slow conversion routine — it is the
+conversion itself.
+
+**A whole `Measurement.Mul`**, which shows that the magnitude is not where the
+time goes either:
+
+| Shape | Time | Allocations |
+|---|---:|---:|
+| the exact core today (`BenchmarkArithmetic/Mul`) | 480 ns | 8 |
+| — of which the unit half (`BenchmarkCompose/Times`, the fractions of D4) | 229 ns | 4 |
+| — of which the magnitude half (prototype: the `apd` multiplication alone) | 52 ns | 1 |
+| prototype: `float64` magnitude, exact `Unit` kept | 240 ns | 4 |
+| prototype: `float64` magnitude and `float64` unit | 94 ns | 1 |
+| prototype: the same, result unit hoisted out of the loop | 9.4 ns | 0 |
+
+**The kernel** — 64 readings multiplied and summed — is tabulated in O2. Its
+first and third rows are `BenchmarkKernel/Exact` and `BenchmarkKernel/Boundary`;
+the middle row is the prototype, which the repository does not carry, because a
+benchmark of a design that was not adopted is a maintenance cost with no reader.
+
+**Accuracy, for the "imprecise" half of the proposal.** A thousand additions of
+0.1 bar: `100.0 bar` exactly, `99.9999999999986 bar` in `float64`. Ten million
+of them drift by 1.6·10⁻⁴ absolute. The size of the error is not the point — the
+point is that both render as valid text in the form of D12 and neither says
+which engine produced it.
 
 ### SSA and generic methods (D13)
 

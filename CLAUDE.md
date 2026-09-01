@@ -160,6 +160,12 @@ error branch that cannot fire usually means the error cannot occur.
 - The default precision is deliberately modest, 20 significant digits. See D9 in
   `CONCEPT.md` — the benchmark data is there; going higher costs measurably and
   buys nothing for physical measurements. decimal128 is one `NewEngine(34)` away.
+- There is no swappable arithmetic and no float-backed fast mode. It was
+  evaluated and measured — see O2 in `CONCEPT.md`: a facade over the operations
+  is *slower* than the decimals it replaces, because the representation is where
+  the time is, and a loop that leaves its units at the boundary beats every
+  variant of a fast mode anyway. `BenchmarkKernel` is that comparison; run it
+  before proposing one again.
 - `unitvet` stays silent on cases it cannot prove (D13). That is the design: a
   dimension checker with false positives gets switched off and then catches
   nothing at all. Do not make it "smarter" by guessing. In particular it trusts

@@ -213,6 +213,18 @@ samples a second, an FFT, a PID loop, a plot: convert the scaling *once* into a
 readings that no one will audit individually do not each need an exact decimal —
 what needs one is the limit they are compared against.
 
+Measured, over a window of 64 readings multiplied and summed
+(`BenchmarkKernel`):
+
+| A loop of 64 readings | ns/op | B/op | allocs/op |
+|---|---:|---:|---:|
+| every intermediate a `Measurement` | 58 900 | 54 304 | 769 |
+| the units left at the boundary, loop in `float64` | 849 | 163 | 6 |
+
+Seventy times, and the factor grows with the window rather than levelling off,
+because the boundary is crossed twice however long the loop is. The second row
+converts and compares exactly where it matters — at the ends — and nowhere else.
+
 **What is cheap enough to ignore.** `Unit` values are immutable and free to
 share. A derived unit built with `Times`, `Per` or `Pow` is built once, not per
 value. `parse.Default()` is a parser built once for the whole catalogue — calling
