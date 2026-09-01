@@ -96,8 +96,8 @@ func TestReciprocalCoversEveryAxis(t *testing.T) {
 	}
 }
 
-// M1's definition of done: Product(q, q.Reciprocal()) == One for random
-// dimensions.
+// The property the dimension algebra is measured by: Product(q, q.Reciprocal())
+// == One for random dimensions.
 func TestProductWithReciprocalIsOne(t *testing.T) {
 	r := rand.New(rand.NewPCG(1, 2))
 	randomExponent := func() dimension.Exponent {

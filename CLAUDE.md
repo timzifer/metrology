@@ -12,13 +12,15 @@ A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
-**Current milestone: M6 done.** The core is implemented, the catalogue holds the
-SI — all seven base units, all twenty-two named derived units, and the non-SI
+**The library is complete for its stated scope.** The core computes, the
+catalogue holds 82 units across 43 quantity packages — all seven SI base units,
+all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
 and writes (`metrology` writes, `parse` reads), and `unitvet` checks dimensions
 statically per D13. What remains before `v1.0.0` is the deliberate API review of
-section 7. The status notes under M1 … M6 in `CONCEPT.md` record what each
-implementation decided.
+section 7 of `CONCEPT.md`; until then the module is `v0.x` and the API may
+change. Section 7 also records what is complete and what each subsystem is
+measured by.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
@@ -86,7 +88,7 @@ magnitude is therefore untagged. Do not merge the two back into one value.
 
 **Every catalogue factor is exact.** A unit whose factor involves π — the degree
 of arc, the oersted — does not go into the catalogue with a rounded decimal. It
-waits for symbolic factors. See the M4 status note in `CONCEPT.md`.
+waits for symbolic factors. See D4 and section 8 of `CONCEPT.md`.
 
 ## Commands
 
@@ -146,9 +148,9 @@ error branch that cannot fire usually means the error cannot occur.
 
 - `Dimension` reserves 8 unused bits (D5). They are held for fractional
   exponents, which are deferred, not forgotten.
-- The default precision is deliberately modest. See O2 in `CONCEPT.md` — the
-  benchmark data is there; going higher costs measurably and buys nothing for
-  physical measurements.
+- The default precision is deliberately modest, 20 significant digits. See D9 in
+  `CONCEPT.md` — the benchmark data is there; going higher costs measurably and
+  buys nothing for physical measurements. decimal128 is one `NewEngine(34)` away.
 - `unitvet` stays silent on cases it cannot prove (D13). That is the design: a
   dimension checker with false positives gets switched off and then catches
   nothing at all. Do not make it "smarter" by guessing. In particular it trusts

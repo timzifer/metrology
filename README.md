@@ -1,19 +1,14 @@
+<img src="docs/gopher.png" alt="" width="180" align="right">
+
 # metrology
 
 [![CI](https://github.com/timzifer/metrology/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/metrology/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftimzifer%2Fmetrology%2Fbadges%2Fcoverage.json)](https://github.com/timzifer/metrology/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/timzifer/metrology.svg)](https://pkg.go.dev/github.com/timzifer/metrology)
 
 A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, and one package per quantity so that autocompletion doubles
 as a catalogue.
-
-> **Status: under construction.** The architecture is settled and written down in
-> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M6, the last one
-> before the API review. The code below runs, the catalogue holds the SI — seven
-> base units, twenty-two named derived units, and the non-SI units of NIST SP 811
-> that process engineering uses — the text form reads and writes, and `unitvet`
-> checks dimensions statically. The API will change without notice until
-> `v1.0.0`.
 
 ```go
 p := pressure.Bar.Of(2.5)
@@ -25,6 +20,12 @@ t, err  := temperature.Celsius.Of(20).
 _, err = temperature.Celsius.Of(20).
          Add(temperature.Celsius.Of(5))     // error: adding two absolute values
 ```
+
+```sh
+go get github.com/timzifer/metrology
+```
+
+<br clear="right">
 
 ## What makes it different
 
@@ -71,6 +72,10 @@ and the catalogue index:
   factor: {num: "101325", den: "760"}
   source: NIST SP 811 (2008), Appendix B.8
 ```
+
+It holds **82 units across 43 quantity packages**: all seven SI base units, all
+twenty-two named derived units, the CGS and legacy units that still appear in
+data sheets, and the non-SI units of NIST SP 811 that process engineering uses.
 
 Every entry carries a source, because a conversion factor is a claim about the
 world and a claim without a citation cannot be checked. The generator refuses a
@@ -174,11 +179,24 @@ apart.
 Go 1.27 or newer. The library uses generic methods, which are only available from
 that release.
 
+## Stability
+
+The library is complete for the scope described above and CI is green: build,
+`go vet`, the race detector, the dimension checker over its own source, and a
+coverage gate at 100 % of hand-written statements.
+
+The module is nevertheless tagged `v0.x`, and **the API may change until
+`v1.0.0`.** What stands between here and there is a deliberate review of the
+exported surface, not missing functionality; the open points are listed in
+[section 7 of CONCEPT.md](CONCEPT.md#7-state-and-the-road-to-v100).
+
 ## Documentation
 
+- [pkg.go.dev](https://pkg.go.dev/github.com/timzifer/metrology) — the API, with
+  runnable examples for everything a caller touches.
 - [CONCEPT.md](CONCEPT.md) — architecture, the fourteen design decisions and the
-  reasoning behind them, milestones, open questions, and a verification log with
-  reproduction steps for every measured claim.
+  reasoning behind them, what is deliberately deferred, and a verification log
+  with reproduction steps for every measured claim.
 - [CLAUDE.md](CLAUDE.md) — invariants and conventions for anyone (human or agent)
   changing this code.
 
@@ -196,6 +214,9 @@ go build -o /tmp/unitvet ./cmd/unitvet
 go vet -vettool=/tmp/unitvet ./...
 ```
 
+Adding a unit means editing `catalog/catalog.yaml` and running `go generate ./...`
+— never editing a `*_gen.go` file.
+
 The project targets 100 % statement coverage of hand-written code, enforced in
 CI. Generated catalogue files are excluded; see D14 for what the target does and
 does not claim.
@@ -208,3 +229,6 @@ the number the gate measured, and no third-party service is involved.
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
+
+The gopher is derived from the Go gopher by Renée French, licensed
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

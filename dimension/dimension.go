@@ -19,7 +19,7 @@ type Exponent int8
 //
 // Bits 56–63 are reserved and always zero for a Dimension built by [New]. They
 // are held for fractional exponents, which are deferred, not forgotten (D5) —
-// see section 9 of CONCEPT.md.
+// see section 8 of CONCEPT.md.
 type Dimension uint64
 
 // Bit offsets of the seven axes, in the order of D5.

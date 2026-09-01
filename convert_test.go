@@ -57,9 +57,9 @@ func TestConversion(t *testing.T) {
 	}
 }
 
-// M2 is done when a round trip across every pair of the mini catalogue
-// reproduces the input exactly. Exactness is the claim of D4 and this is what
-// tests it: a factor stored pre-rounded fails here in the third decimal.
+// A round trip across every pair of the mini catalogue reproduces the input
+// exactly. Exactness is the claim of D4 and this is what tests it: a factor
+// stored pre-rounded fails here in the third decimal.
 func TestRoundTripAcrossEveryPair(t *testing.T) {
 	groups := map[string][]metrology.Unit{
 		"length":      {Metre, Kilometre},

@@ -27,8 +27,8 @@ import (
 	"github.com/timzifer/metrology/volumeflow"
 )
 
-// The golden test of M4: one unit of each non-SI unit in the catalogue, in the
-// SI unit it is defined against, compared to the factor printed in NIST SP 811.
+// The golden test of the catalogue: one of each non-SI unit, in the SI unit it
+// is defined against, compared to the factor printed in NIST SP 811.
 //
 // The expected values are written out in full rather than computed, because a
 // test that computes what it checks proves only that the code agrees with

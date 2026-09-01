@@ -21,9 +21,6 @@
 //
 // See CONCEPT.md in the repository root for the architecture and the reasoning
 // behind it. Design decisions are referenced throughout the code as D1 … D14.
-//
-// This package is under construction; see the milestones in CONCEPT.md for what
-// exists today.
 package metrology
 
 // The quantity packages and the catalogue index are generated from the YAML
