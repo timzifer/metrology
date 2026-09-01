@@ -927,9 +927,10 @@ at minimum:
   decides — which is a v1 question rather than a later one.
 - `O1` in section 10, which decides whether `imperial` is a subpackage or a module
 - `O2` in section 10, which decides whether the arithmetic is a type parameter of
-  `Measurement`. It is the one open question that cannot be deferred past
-  `v1.0.0`: parameterising the core later renames every type in the API, and
-  the recommendation is precisely not to
+  `Measurement`. Only that half of it cannot be deferred past `v1.0.0` —
+  parameterising the core later renames every type in the API, and the
+  recommendation is precisely not to. The adaptive fast path O2 measures
+  alongside it is invisible in the API and can land whenever
 
 `cmd/unitvet` is versioned with the library but breaks nothing on its own: it is
 additive, opt-in, and can ship a new version independently.
@@ -955,7 +956,7 @@ additive, opt-in, and can ship a new version independently.
 | Risk | Mitigation |
 |---|---|
 | The aliasing invariant breaks unnoticed | It is the one rule whose violation causes silent data corruption. Hence the dedicated guard test of D3, using values above 38 digits — below that threshold apd/v3 masks the bug. |
-| Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it, and why `BenchmarkKernel` measures that boundary as faster than any arithmetic swapped in behind it (O2). If it binds, the escape is a fast path for values that fit losslessly in `int64` — not a return to `float64`, which O2 measures as slower than the boundary it would replace. |
+| Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it, and why `BenchmarkKernel` measures that boundary as faster than any arithmetic swapped in behind it (O2). If it binds, the escape is a fast path for values that fit losslessly in `int64`, which O2 now measures rather than proposes: nine times on an accumulation, no allocations, and the same answer as the slow path — not a return to `float64`, which O2 measures as slower than the boundary it would replace and as a different arithmetic besides. |
 | Kind semantics proliferate | Every new kind needs a justification in the catalogue. No dimension collision and no affinity, no kind. |
 | `unitvet` produces a false positive | The one failure mode that kills the tool, because users disable it and then get nothing. Every rule must be provable before it reports; `analysistest` asserts the silent cases as explicitly as the reported ones. Prefer missing a real bug over inventing one. |
 | `unitvet` drifts from the library | Prevented by construction: its dimension table is generated from the catalogue of D8, in the same `go generate` run. A hand-maintained second table would be the defect waiting to happen. |
@@ -987,18 +988,25 @@ distinction visible is worth doing. A subpackage with its own catalogue file and
 its own source column achieves it without a second module path, a second release
 cadence and a second CI pipeline.
 
-### O2 — A fast mode: the arithmetic as a facade?
+### O2 — A fast mode: swappable arithmetic, or an adaptive fast path?
 
 **Status:** open, with a recommendation; decide before `v1.0.0`
 
-The proposal: hand the arithmetic in from outside. `apd.Decimal` by default, and
-where a simulation wants speed over exactness, a float-backed implementation
-passed in its place — as an interface, or as a type parameter of `Measurement`.
+Two proposals travel under one name and they do not have the same answer. One
+hands the arithmetic in from outside; the other keeps one arithmetic and lets a
+magnitude be a machine integer when it can be. The first is refused below on a
+measurement, the second is not.
 
-Everything below was measured, on `bench_test.go` and on prototypes of each
-shape; the numbers are in section 11. `BenchmarkKernel` was added for this
-question and stays, because it is the comparison a reader will want to repeat
-before asking it again.
+#### Reading 1 — the arithmetic passed in from outside
+
+`apd.Decimal` by default and, where a simulation wants speed over exactness, a
+float-backed implementation passed in its place — as an interface, or as a type
+parameter of `Measurement`.
+
+Both readings were measured, on `bench_test.go` and on prototypes of each shape;
+the numbers are in section 11. `BenchmarkKernel` was added for this question and
+stays, because it is the comparison a reader will want to repeat before asking
+it again.
 
 **A fast mode is a change of representation, not a change of operations.** This
 is the finding that settles most of the question. Take the proposal literally —
@@ -1058,24 +1066,125 @@ readings multiplied and summed:
 The third row is principle 3 written out, it is available today through
 `In[float64]`, and it is **seven times faster than the fast mode** — because a
 fast mode still builds a result unit on every operation, while the boundary
-crosses twice for the whole loop. A fast mode is therefore not the fast option.
-It is the option that keeps the dimension check *inside* the loop, and that, not
-speed, is the only thing it sells.
+crosses twice for the whole loop. A swapped-in arithmetic is therefore not the
+fast option. It is the option that keeps the dimension check *inside* the loop,
+and that, not speed, is the only thing it sells.
 
-**Recommendation: do not parameterise the core.** Should the dimension check
-inside the loop turn out to be worth paying for, it belongs in a concrete type
-of its own — `metrology/fast`, built from catalogue units at the boundary, with
-no `MarshalText` and an explicitly named lossy readout. That shape costs the
-core nothing, needs no second catalogue, leaves `unitvet` and `parse` alone, and
-— being additive — can be decided *after* `v1.0.0`. Parameterising cannot: it
-renames every type in the API.
+**On this reading the answer is no: do not parameterise the core.** Should the
+dimension check inside the loop turn out to be worth paying for, it belongs in a
+concrete type of its own — `metrology/fast`, built from catalogue units at the
+boundary, with no `MarshalText` and an explicitly named lossy readout. That
+shape costs the core nothing, needs no second catalogue, leaves `unitvet` and
+`parse` alone, and — being additive — can be decided *after* `v1.0.0`.
+Parameterising cannot: it renames every type in the API.
 
-**Where the exact core's own headroom is,** since the question was speed. Of the
-480 ns of a `Mul`, **229 ns and half the allocations are the unit half** — the
-exact multiplication of two factor fractions (D4), which `BenchmarkCompose/Times`
-measures on its own — against some 50 ns for the magnitude. That fraction is
-invariant across a loop and is rebuilt on every iteration anyway. Whatever the fix is, it is a larger factor than any backend
-swap, it keeps every digit, and it needs no decision recorded here.
+#### Reading 2 — a magnitude that is sometimes a machine integer
+
+The other proposal keeps *one* arithmetic and changes what a magnitude is held
+in: an `int64` coefficient with an exponent where the value fits one, an
+`apd.Decimal` otherwise. `Add`, `Sub` and `Mul` check whether both operands are
+the cheap form and take the shortcut; anything else promotes both to decimals
+and runs the path that exists today. Nothing is passed in and nothing is
+chosen — the value decides, at run time, and the caller never sees which path
+ran.
+
+That difference is the whole difference. Reading 1 asks a caller to trade
+exactness for speed; reading 2 trades nothing, because **the shortcut computes
+what the slow path would have computed**. Measured, on the accumulation the
+fast path exists for — 64 additions on one scale:
+
+| 64 additions | Time | Allocations |
+|---|---:|---:|
+| the core today | 23 500 ns | 257 |
+| the core with the identity precheck below | 17 800 ns | 257 |
+| **an `int64` fast path (prototype)** | **2 440 ns** | **0** |
+| units left at the boundary, for reference | 605 ns | 5 |
+
+Nine times, and every allocation gone: an integer magnitude has no coefficient
+slice to share, so the defensive copy D3 exists for has nothing to copy and
+`Reduce` has nothing to reduce. The boundary is still faster, but it is the row
+that gives up both the dimension check and the exact arithmetic; this one gives
+up neither. That is what reading 1 could not offer.
+
+**Three conditions, and the third is the one that surprises.**
+
+**It has to hold an integer, not a float.** An `int64` coefficient with an
+exponent *is* a decimal, so `0.1 + 0.2` is `0.3` down both paths and a thousand
+additions of 0.1 is exactly 100. A `float64` shortcut answers
+`0.30000000000000004` and `99.999999999998593` — the same expression with two
+answers, decided by how the operands happened to be constructed, invisible to
+the caller and to the text form of D12. A fast path that is not the same
+arithmetic is reading 1 wearing a different hat.
+
+**It has to be a tagged struct, not an interface member.** With the magnitude
+behind a `NumericHolder` interface the shortcut measures 60 ns and **allocates
+16 bytes per value**, because a non-pointer value stored in an interface
+escapes; as a tagged field of the struct it measures 45 ns and allocates
+nothing. This is D1's argument arriving a third time, and it is worth being
+exact about: the *type switch* is not the cost — the boxing is.
+
+**It needs no generics at all.** `Measurement` stays one concrete type, the
+catalogue stays one set of `var`s, the generator emits exactly what it emits
+today, and `parse` and `unitvet` are untouched. The tag is a field, and a field
+is not a type parameter. Every cost that made reading 1 unaffordable is absent
+here — which is the strongest single argument for this reading and the reason
+it is worth separating the two proposals rather than answering them together.
+
+**Where the fast path stops, which bounds what it can be sold as.** It covers
+addition, subtraction, comparison and multiplication — a product of two
+coefficients is exact until it overflows. It does **not** cover division, which
+is not exact in general, and it does not survive a conversion: a magnitude that
+has been through the single division of D4 carries twenty significant digits
+and no longer fits an `int64`. So a loop that converts on every iteration falls
+off the fast path on the first one and never returns to it. And a product chain
+keeps a cost the fast path cannot touch: `Mul` rebuilds the result unit every
+time, so the kernel of reading 1 measures 20 700 ns on the fast path against
+849 ns at the boundary. The magnitude was never the expensive part of a
+product — see below.
+
+**What it costs.** `Measurement` grows from 152 to 176 bytes. Every arithmetic
+operation gains a promotion branch, and D14 wants each of them tested: both
+forms, mixed forms, overflow, mismatched exponents. The aliasing guard of D3
+grows a second form to guard. None of that is structural, which is exactly what
+separates it from reading 1.
+
+**Recommendation.** Reading 1: no. Reading 2: worth doing, as a tagged field
+behind the existing API — no interface, no type parameter, integers only —
+and worth doing *after* the free prerequisite below, which is most of its own
+cost and needs no decision at all. Being invisible in the API, it is additive
+and does not have to precede `v1.0.0`; being invisible in the API is also why it
+must not change a single answer, and the test that says so is that the fast and
+slow paths agree on every operand pair.
+
+#### The prerequisite both readings kept running into
+
+`Unit.Equal` cross-multiplies two factor fractions to answer whether two units
+are the same scale, which costs 97 ns and is on the path of every same-unit
+addition, every comparison and every conversion into a unit a value already
+holds. Two references to one catalogue `var` share their decimals, so the
+pointers answer the question before the arithmetic does. Trying identity first
+measures:
+
+| | before | after |
+|---|---:|---:|
+| `Add` | 372 ns | 282 ns |
+| `Cmp` | 143 ns | 70 ns |
+| conversion into the same unit | 205 ns | 103 ns |
+| the `int64` fast path of reading 2 | 105 ns | 45 ns |
+
+The last row is the reason it is written down here rather than filed as an
+optimisation: without it, **the unit check is most of the fast path**, and a
+fast path built on top of it would be measuring `Unit.Equal` instead of the
+arithmetic it set out to avoid. It changes no contract, no signature and no
+answer.
+
+**Where the rest of the exact core's headroom is.** Of the 480 ns of a `Mul`,
+**229 ns and half the allocations are the unit half** — the exact multiplication
+of two factor fractions (D4), which `BenchmarkCompose/Times` measures on its
+own — against some 50 ns for the magnitude. That fraction is invariant across a
+loop and is rebuilt on every iteration anyway. It is the one place where the
+library recomputes something it already knows, and no fast path for magnitudes
+reaches it.
 
 ---
 
@@ -1180,11 +1289,37 @@ first and third rows are `BenchmarkKernel/Exact` and `BenchmarkKernel/Boundary`;
 the middle row is the prototype, which the repository does not carry, because a
 benchmark of a design that was not adopted is a maintenance cost with no reader.
 
+**The adaptive fast path (reading 2).** One addition of two magnitudes on one
+scale, by what the magnitude is held in and whether `Unit.Equal` tries identity
+first:
+
+| Add | plain | with the identity precheck |
+|---|---:|---:|
+| the core today | 372 ns, 4 allocs | 282 ns, 4 allocs |
+| `int64` behind a `NumericHolder` interface | 124 ns, 1 alloc | 60 ns, 1 alloc |
+| `int64` as a tagged field of the struct | 105 ns, 0 allocs | 45 ns, 0 allocs |
+
+The interface row allocates because a non-pointer value stored in an interface
+escapes; the type switch itself is free. Both fast rows carry the full kind and
+quantity rules of D6 — adding them changed no measurable time, which is why the
+unit check and not the rule checking is what the precheck row removes.
+
+Accumulating 64 additions on one scale: 23 500 ns / 257 allocs in the core,
+17 800 ns with the precheck, 2 440 ns / **0 allocs** on the fast path, 605 ns at
+the boundary. The same 64 readings multiplied and summed stay at 20 700 ns on
+the fast path, because `Mul` rebuilds the result unit each time and no magnitude
+shortcut reaches that.
+
+`unsafe.Sizeof`: `Measurement` 152 B today, 176 B with a tagged `int64` field
+and its exponent, 136 B with an interface member that then allocates per value.
+
 **Accuracy, for the "imprecise" half of the proposal.** A thousand additions of
 0.1 bar: `100.0 bar` exactly, `99.9999999999986 bar` in `float64`. Ten million
 of them drift by 1.6·10⁻⁴ absolute. The size of the error is not the point — the
 point is that both render as valid text in the form of D12 and neither says
-which engine produced it.
+which engine produced it. The same test run against an `int64` coefficient
+returns the exact answer down both paths, `0.1 + 0.2 = 0.3` included, which is
+the line between the two readings drawn as a measurement.
 
 ### SSA and generic methods (D13)
 
