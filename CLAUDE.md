@@ -12,9 +12,11 @@ A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
-**Current milestone: M1 → M2.** `dimension` and `symbol` are implemented; the
-status note under M1 in `CONCEPT.md` records what their implementation decided.
-M2 is the core — `Measurement`, `Unit`, arithmetic. See section 7 of
+**Current milestone: M2 → M3.** `dimension`, `symbol` and the core —
+`Measurement`, `Unit`, arithmetic, conversion, errors — are implemented. The
+status notes under M1 and M2 in `CONCEPT.md` record what those implementations
+decided. M3 is the YAML catalogue and its generator; the mini catalogue the core
+is tested against lives in `catalog_test.go` and is not shipped. See section 7 of
 `CONCEPT.md` for the sequence and the definition of done for each step.
 
 ## Invariants — breaking one of these is a defect, not a style question

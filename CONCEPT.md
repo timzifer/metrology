@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Status** | M1 implemented — `dimension` and `symbol` are in the tree |
+| **Status** | M2 implemented — the core computes; the catalogue is next |
 | **Date** | 2026-09-01 |
 | **Module** | `github.com/timzifer/metrology` |
 | **Go** | 1.27 (minimum) |
@@ -634,6 +634,52 @@ eight units, just enough to exercise the arithmetic.
 - each of the five kind rules from D6 has a test
 - `-race` is clean
 - coverage is 100 % per D14
+
+**Status: done.** All five conditions hold. What the implementation decided,
+beyond what was written above:
+
+- **`Kind` marks the affine distinction only.** D6 gives the kind two jobs:
+  absolute versus interval, and resolving dimension collisions such as torque
+  against energy. The second one is not implemented as a kind, because packing
+  two independent facts into one word is precisely what D5 took apart. It
+  arrives with the catalogue as a separate quantity tag in M4, where the first
+  collisions actually appear; until then a kind is `Interval` or `Absolute` and
+  nothing else.
+- **An interval unit may not carry an offset.** An offset is what makes a scale
+  affine, and an affine scale measures points. Rejecting the combination at
+  construction removes the case from every later operation: a unit that reaches
+  the arithmetic as an interval is linear, so a product never has to ask.
+- **A unit may declare the interval unit its differences are read on** — K for
+  °C, °R for °F. Without it `25 °C − 20 °C` would have to be 5 °C, which reads
+  like a temperature and is not one. The difference is *converted* onto that
+  unit, not merely labelled with it, so a scale declaring a counterpart with a
+  different factor still yields the right number.
+- **The scale a difference is computed on is derived, never the declared one.**
+  Those are two different units — the receiver's own factor without the offset,
+  and the unit the result is read on — and the first implementation conflated
+  them. A test with a Celsius scale declaring degrees Rankine holds them apart.
+- **`Unit.Of` is total.** A NaN or an infinity is carried as the decimal form of
+  itself rather than rejected at the boundary, so construction never returns an
+  error a caller has to thread through. Both stay visible: they print as NaN and
+  Infinity, and asking for one as an integer is a `RangeError`.
+- **`Measurement.In` refuses rather than truncates.** A fractional magnitude
+  read into an integer, or one outside its range, is an error and not a silently
+  altered number — which is the failure mode this library exists to avoid.
+- **The exact readout is `DecimalIn`, not `In[*apd.Decimal]`.** The API sketch
+  in section 4 wrote the latter; a pointer type cannot join a `~float64`-style
+  type set, so the exact path is its own method.
+- **`Engine` is a value with a precision, and its zero value is the default.**
+  Every operation exists twice — as a method on `Measurement` at
+  `DefaultPrecision`, and on `Engine` for callers who need more. There is no
+  package-level context to configure, which keeps D7 intact.
+- **Multiplication and division round; addition and subtraction do not.** A sum
+  of two decimals is exact and stays exact. A chain of exact products doubles its
+  digit count at every step, so those round to the engine's precision — which is
+  where D9 says the rounding belongs.
+- **`String` is the canonical form, `Prefixed` the display form.** The canonical
+  text keeps the unit the measurement is held in, because D12 requires the text
+  to read back as the same measurement. Prefix selection is a rendering choice
+  and lives in its own method.
 
 ### M3 — Catalogue format and generator
 
