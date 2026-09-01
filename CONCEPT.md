@@ -1156,27 +1156,40 @@ and does not have to precede `v1.0.0`; being invisible in the API is also why it
 must not change a single answer, and the test that says so is that the fast and
 slow paths agree on every operand pair.
 
-#### The prerequisite both readings kept running into
+#### The prerequisite both readings kept running into — done
 
-`Unit.Equal` cross-multiplies two factor fractions to answer whether two units
-are the same scale, which costs 97 ns and is on the path of every same-unit
-addition, every comparison and every conversion into a unit a value already
-holds. Two references to one catalogue `var` share their decimals, so the
-pointers answer the question before the arithmetic does. Trying identity first
-measures:
+`Unit.Equal` cross-multiplied two factor fractions to answer whether two units
+are the same scale, and that answer is on the path of every same-unit addition,
+every comparison and every conversion into a unit a value already holds. Two
+references to one catalogue `var` share their decimals, so the pointers answer
+the question before the arithmetic does — and D3 is what makes reading them
+sound rather than lucky: nothing ever writes to a unit's decimals, so sharing a
+pointer means holding the same number for as long as both units exist. Without
+D3 it would be a cache with no invalidation.
+
+`sameScale` in `unit.go` now asks the pointers first. Measured back to back on
+one machine, medians of seven runs:
 
 | | before | after |
 |---|---:|---:|
-| `Add` | 372 ns | 282 ns |
-| `Cmp` | 143 ns | 70 ns |
-| conversion into the same unit | 205 ns | 103 ns |
-| the `int64` fast path of reading 2 | 105 ns | 45 ns |
+| `Cmp` | 154 ns | 75 ns |
+| conversion into the same unit | 240 ns | 110 ns |
+| `Add` | 371 ns | 284 ns |
+| `Sub` | 377 ns | 302 ns |
+| the `int64` fast path of reading 2 (prototype) | 105 ns | 45 ns |
 
-The last row is the reason it is written down here rather than filed as an
-optimisation: without it, **the unit check is most of the fast path**, and a
-fast path built on top of it would be measuring `Unit.Equal` instead of the
-arithmetic it set out to avoid. It changes no contract, no signature and no
-answer.
+The last row is why this belonged in the decision rather than in a later patch:
+without it **the unit check is most of the fast path**, and a fast path built on
+top of it would have been measuring `Unit.Equal` instead of the arithmetic it
+set out to avoid.
+
+**What it does not reach, which is the same boundary reading 2 ran into.** The
+shortcut fires when both operands name the same unit *object*. A unit a `Mul`
+just built is a fresh object with fresh decimals, so an accumulation of computed
+products — `BenchmarkKernel/Exact` — compares two equal-but-distinct units on
+every iteration and pays the cross multiplication anyway. The two findings are
+one finding seen twice: the library recomputes units it already has, and both a
+magnitude fast path and an identity check stop at that.
 
 **Where the rest of the exact core's headroom is.** Of the 480 ns of a `Mul`,
 **229 ns and half the allocations are the unit half** — the exact multiplication

@@ -181,7 +181,30 @@ func (u Unit) Equal(other Unit) bool {
 		u.kind == other.kind &&
 		u.quantity == other.quantity &&
 		u.sym.Equal(other.sym) &&
-		u.offset.Cmp(other.offset) == 0 &&
+		sameScale(u, other)
+}
+
+// sameScale reports whether two units stand in the same relation to their base
+// unit: the same offset, and the same fraction.
+//
+// The pointers are asked before the arithmetic is, and that is not a
+// micro-optimisation of the comparison below it — it is what makes the
+// comparison affordable where it is hot. Every same-unit addition, every
+// comparison and every conversion into the unit a value already holds arrives
+// here, and in each of those the two units are usually the *same* catalogue
+// variable, whose decimals are therefore literally the same objects.
+//
+// D3 is what makes reading the pointers sound rather than merely lucky: nothing
+// ever writes to a unit's decimals, so two units sharing one means they hold the
+// same number for as long as both exist, not just at the instant of the
+// comparison. Without D3 this would be a cache with no invalidation.
+func sameScale(u, other Unit) bool {
+	if u.num == other.num && u.den == other.den && u.offset == other.offset {
+		return true
+	}
+	// Distinct decimals still have to be compared as numbers: 1/2 and 5/10 are
+	// one scale written two ways, and a catalogue is free to write either.
+	return u.offset.Cmp(other.offset) == 0 &&
 		sameRatio(u.num, u.den, other.num, other.den)
 }
 
