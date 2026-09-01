@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Status** | M3 implemented — the catalogue is data and the Go code is generated |
+| **Status** | M4 implemented — the SI is in the catalogue, checked against NIST SP 811 |
 | **Date** | 2026-09-01 |
 | **Module** | `github.com/timzifer/metrology` |
 | **Go** | 1.27 (minimum) |
@@ -214,13 +214,30 @@ multiplication loses the absolute marker. Both disappear by construction once
 kind is no longer a bitfield in the same word — and kind gains room for more than
 eight values, which D6 requires.
 
-### D6 — Kind carries two jobs, with explicit arithmetic rules
+### D6 — Kind and quantity, with explicit arithmetic rules
 
-**Status:** decided
+**Status:** decided; revised in M4, when the collisions arrived
 
-First, the affine distinction *absolute vs. interval*. Second, resolving
-dimension collisions: torque and energy are both kg·m²·s⁻², gray and sievert both
-m²·s⁻², kinematic viscosity and thermal diffusivity both m²·s⁻¹.
+Two facts have to travel with a unit, and the original plan gave both to the
+kind. They are now two fields, for the same reason D5 took the kind out of the
+dimension word: they are independent, and packing independent facts into one
+value is how a `WithoutKind` ends up clearing four of eight bits.
+
+**`Kind` — the affine distinction, *absolute vs. interval*.** 20 °C is a point
+on a scale, 5 K is a distance along one. Two values, and the rules below.
+
+**`Quantity` — which quantity a shared dimension is being read as.** The hertz
+and the becquerel are both T⁻¹; the gray and the sievert are both L²T⁻²; a plane
+angle, a solid angle and a bare ratio are all dimensionless; the candela and the
+lumen are both J. A string tag rather than an enum, because the catalogue is
+data (D8) and the set of quantities is open — M4 added seven tags without
+touching a line of the core.
+
+The zero `Quantity` is untagged, and untagged is compatible with everything.
+That is not laxity, it is the only workable rule: multiplication and division
+drop the tag, so *every computed magnitude is untagged*, and a rule that refused
+to name them would make each computation a dead end. The check fires only where
+both sides make a claim and the claims differ — 50 Hz asked for in becquerel.
 
 **Rules for addition and subtraction:**
 
@@ -232,12 +249,22 @@ m²·s⁻², kinematic viscosity and thermal diffusivity both m²·s⁻¹.
 | absolute + absolute | error |
 | interval − absolute | error |
 
-**Rule for multiplication and division.** The result carries *no* kind. A product
-of a torque quantity and an angle quantity is no longer a torque quantity, and a
-system that tries to guess will guess wrong. Reinterpreting a result as a
-kind-bearing quantity is an explicit, checked conversion: `torque.From(m)`.
-Absolute values may not be multiplied at all — 20 °C times 2 is physically
-meaningless and returns an error.
+A sum takes the tag of whichever operand carries one: an untagged T⁻¹ added to a
+frequency is a frequency, and there is nothing else it could be.
+
+**Rule for multiplication and division.** The result carries *neither* kind nor
+quantity. A product of a torque and an angle is no longer a torque, and a system
+that tries to guess will guess wrong. Naming the result is an explicit, checked
+conversion — `q.To(pressure.Pascal)`, or `catalog.Canonical` for the unit that
+dimension resolves to. Absolute values may not be multiplied at all: 20 °C times
+2 is physically meaningless and returns an error.
+
+**What the tag does not solve.** Two quantities on one dimension that also share
+a *symbol* remain indistinguishable in the text form of D12 — `5 m²/s` is
+kinematic viscosity and thermal diffusivity and a diffusion coefficient, and no
+tag in the world makes that string read back to one of them. The catalogue
+therefore carries one of the three, and the others wait for a text form that
+carries the quantity as well.
 
 ### D7 — No global state, no init side effects
 
@@ -752,6 +779,44 @@ non-SI units. Every entry with a source citation.
 - a golden test reproduces the conversion tables from NIST SP 811
 - every unit has a source recorded in the catalogue
 
+**Status: done.** 82 units across 43 packages. What the work decided:
+
+- **The dimension collisions arrived, and D6 changed to meet them.** `Quantity`
+  is now its own field next to `Kind`, not a second meaning inside it. Seven
+  tags were enough for the whole SI: frequency, radioactivity, absorbed dose,
+  dose equivalent, luminous intensity, luminous flux, plane angle, solid angle,
+  kinematic viscosity.
+- **Every factor in the catalogue is exact, and units that cannot be are left
+  out.** The degree of arc is π/180 radians and the oersted is 1000/4π A·m⁻¹:
+  neither has a finite decimal fraction, so neither is in the catalogue. A
+  rounded factor would be precisely what D4 forbids, and shipping one silently
+  because the unit is popular is how a catalogue stops being auditable. What is
+  needed is a symbolic factor — a rational multiple of π — which is section 8's
+  problem, not M4's.
+- **Two quantities that share a dimension *and* a symbol cannot both ship.**
+  Thermal diffusivity and a diffusion coefficient are m²/s, like kinematic
+  viscosity; the tag separates them in the type system but not in the text form
+  of D12, where `5 m²/s` has to read back to exactly one unit. The catalogue
+  carries kinematic viscosity and says so in a comment.
+- **The absorbed-dose rad is not in the catalogue.** Its symbol is `rad`, which
+  is the radian. That collision is real, it is in the standards, and the
+  generator is right to refuse it — the rem is there, and the CGS dose unit
+  waits for a symbol namespace.
+- **The golden test compares to eighteen significant digits, not to the last
+  one.** Factors such as one 3600th have no finite decimal form, so the
+  conversion rounds once by D9 and the return trip cannot undo that rounding.
+  Eighteen digits is two below the engine default and far past where a
+  pre-divided factor fails: a torr stored as 133.32236842105263 goes wrong in
+  the seventeenth.
+- **`duration`, not `time`.** A program that measures durations usually imports
+  the standard library package of that name too, and a library that forces an
+  alias on every consumer has picked the wrong name — the same argument that
+  settled the module name in section 1.
+- **The package is the quantity.** One dimension per package, enforced by the
+  generator; where one dimension carries two quantities they are two packages,
+  `frequency` and `activity`, each with its tag. Autocompletion stays a
+  catalogue rather than a pile.
+
 ### M5 — Edges: parsing, serialisation, documentation
 
 Reading and writing the text form, JSON and SQL, godoc with runnable examples per
@@ -792,6 +857,8 @@ breaks nothing.
 | Topic | Rationale |
 |---|---|
 | Fractional exponents | Occur in correlations (e.g. `m·s⁻⁰·⁵`) but require rationals instead of `int8` in the dimension word. The eight reserved bits from D5 keep that door open. |
+| Units defined through π | The degree of arc, the gon, the oersted. Their factors are rational multiples of π and have no finite decimal form, so D4 cannot store them exactly. Needs a symbolic factor — a fraction plus a π exponent — which changes the shape of every conversion. Left out of the catalogue rather than rounded into it. |
+| Quantities sharing a dimension *and* a symbol | Thermal diffusivity and a diffusion coefficient print as `m²/s`, like kinematic viscosity. The quantity tag of D6 separates them in code, but the text form of D12 has to read back to one unit. Needs a text form that carries the quantity. |
 | Measurement uncertainty | A large topic of its own with its own error propagation. Sensible as a layer on top, not in the core. |
 | Non-linear scales | dB, pH, degrees Baumé. They do not fit the factor/offset model of D4 and need their own abstraction. |
 | Localised output | Decimal comma, unit names per language. Maintainable only once the catalogue is settled. |

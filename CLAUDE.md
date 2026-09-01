@@ -12,13 +12,12 @@ A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
-**Current milestone: M3 → M4.** The core is implemented and the catalogue is
-generated: `catalog/catalog.yaml` is the source of truth, `tools/catgen` turns it
-into the quantity packages and `catalog/units_gen.go`. M4 scales that catalogue —
-the electromagnetic, photometric and radiological block of SI, plus golden tests
-against NIST SP 811. The status notes under M1, M2 and M3 in `CONCEPT.md` record
-what each implementation decided. See section 7 of `CONCEPT.md` for the sequence
-and the definition of done for each step.
+**Current milestone: M4 → M5.** The core is implemented and the catalogue holds
+the SI: all seven base units, all twenty-two named derived units, and the non-SI
+units of NIST SP 811 that process engineering uses. M5 is the text form — parsing,
+serialisation, fuzzing. The status notes under M1 … M4 in `CONCEPT.md` record what
+each implementation decided. See section 7 of `CONCEPT.md` for the sequence and
+the definition of done for each step.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
@@ -60,6 +59,16 @@ package-level map that something writes to at init time, stop and re-read D7.
 absolute − absolute = interval; absolute + absolute is an error; multiplication
 and division drop the kind entirely. Do not add heuristics that guess a kind for
 a computed result.
+
+**Kind and quantity are separate fields (D6).** `Kind` is absolute versus
+interval. `Quantity` is which quantity a shared dimension is being read as — the
+hertz and the becquerel are both T⁻¹. The empty quantity is compatible with
+everything, because multiplication and division drop the tag and every computed
+magnitude is therefore untagged. Do not merge the two back into one value.
+
+**Every catalogue factor is exact.** A unit whose factor involves π — the degree
+of arc, the oersted — does not go into the catalogue with a rounded decimal. It
+waits for symbolic factors. See the M4 status note in `CONCEPT.md`.
 
 ## Commands
 
