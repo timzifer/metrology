@@ -96,6 +96,14 @@ func TestUnitEqual(t *testing.T) {
 		want bool
 	}{
 		{"a unit equals itself", Bar, Bar, true},
+		// The scale comparison reads the decimals' pointers before it reads
+		// their values, so the case that matters is the one where the pointers
+		// differ and the scale does not: an independently built bar is the same
+		// scale as the catalogue's, and a shortcut that answered from identity
+		// alone would say otherwise.
+		{"a unit equals an independently built copy", Bar, metrology.MustUnit(metrology.UnitDef{
+			Dimension: Bar.Dimension(), Symbol: symbol.Static("bar"), Numerator: "100000",
+		}), true},
 		// The factor is compared as a number, not digit by digit: 1/2 and 5/10
 		// are the same scale, however the catalogue happens to write them.
 		{"the same ratio written differently", half, fiveTenths, true},

@@ -213,6 +213,18 @@ samples a second, an FFT, a PID loop, a plot: convert the scaling *once* into a
 readings that no one will audit individually do not each need an exact decimal —
 what needs one is the limit they are compared against.
 
+Measured, over a window of 64 readings multiplied and summed
+(`BenchmarkKernel`):
+
+| A loop of 64 readings | ns/op | B/op | allocs/op |
+|---|---:|---:|---:|
+| every intermediate a `Measurement` | 58 900 | 54 304 | 769 |
+| the units left at the boundary, loop in `float64` | 849 | 163 | 6 |
+
+Seventy times, and the factor grows with the window rather than levelling off,
+because the boundary is crossed twice however long the loop is. The second row
+converts and compares exactly where it matters — at the ends — and nowhere else.
+
 **What is cheap enough to ignore.** `Unit` values are immutable and free to
 share. A derived unit built with `Times`, `Per` or `Pow` is built once, not per
 value. `parse.Default()` is a parser built once for the whole catalogue — calling
@@ -222,7 +234,7 @@ API makes easy to make.
 
 ### The measurements
 
-Median of five runs of `bench_test.go` and `parse/bench_test.go` on one machine —
+Medians of five or more runs of `bench_test.go` and `parse/bench_test.go` on one machine —
 `linux/amd64`, Intel Xeon at 2.10 GHz, a shared cloud VM, Go 1.27:
 
 ```sh
@@ -239,13 +251,13 @@ one exact multiplication, one rounded division.
 | Conversion, 50 digits | 685 | 416 | 9 |
 | Conversion, `float64` for reference | 0.6 | 0 | 0 |
 | Conversion, affine (°F → °C) | 454 | 32 | 1 |
-| Conversion into the same unit | 208 | 32 | 1 |
-| `Add` | 346 | 256 | 4 |
+| Conversion into the same unit | 110 | 32 | 1 |
+| `Add` | 284 | 256 | 4 |
 | `Add`, absolute + interval | 819 | 288 | 5 |
-| `Sub` | 356 | 256 | 4 |
+| `Sub` | 302 | 256 | 4 |
 | `Mul` | 516 | 592 | 8 |
 | `Div` | 638 | 592 | 8 |
-| `Cmp` | 143 | 32 | 1 |
+| `Cmp` | 75 | 32 | 1 |
 | `Times`, `Per` (unit algebra, once per derived unit) | 229–235 | 208 | 4 |
 | `Pow` | 371 | 288 | 9 |
 
@@ -253,6 +265,12 @@ Addition and subtraction of two decimals are exact and never round (D9), which i
 why they cost visibly less than a product or a quotient. The affine addition
 costs more than the plain one because it converts the interval operand onto the
 absolute scale before it may add anything (D6).
+
+The three cheapest of these — `Cmp`, `Add` and a conversion into the unit a value
+already holds — are cheap because both operands usually name the *same* unit, and
+a unit compared with itself is recognised by identity instead of by comparing its
+factor. Two units built separately from the same numbers still compare equal;
+they just pay for it. Nothing in the API distinguishes the two cases.
 
 **Crossing the boundary.**
 

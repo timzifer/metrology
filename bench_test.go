@@ -254,3 +254,55 @@ func BenchmarkCompose(b *testing.B) {
 	})
 	_ = sinkUnit
 }
+
+// BenchmarkKernel is the loop O2 turns on: a window of readings multiplied and
+// summed, once with every intermediate a [metrology.Measurement] and once with
+// the units left at the boundary.
+//
+// The two are the same physics and differ by two orders of magnitude, which is
+// the whole of the argument in section 10 against an arithmetic passed in from
+// outside. A swappable backend would make the magnitudes cheap and leave the
+// per-operation unit algebra of Exact standing; Boundary removes both by
+// crossing twice instead of 2·window times, and it needs nothing from the
+// library that D10 does not already provide.
+func BenchmarkKernel(b *testing.B) {
+	// 64 readings is a window, not a limit: the ratio between the two is set
+	// by the crossings, so it grows with the window rather than levelling off.
+	const window = 64
+
+	pressure := Bar.Of(2.5)
+	area := SquareMetre.Of(1.25)
+	product, err := Bar.Times(SquareMetre)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.Run("Exact", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			total := product.Of(0)
+			for range window {
+				var force metrology.Measurement
+				force, sinkErr = pressure.Mul(area)
+				total, sinkErr = total.Add(force)
+			}
+			sinkMeasurement = total
+		}
+	})
+
+	// The exact domain is left once and re-entered once. Everything between is
+	// float64 and carries no unit — which is the trade, and why the boundary
+	// belongs where the loop is not.
+	b.Run("Boundary", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			p, _ := pressure.In[float64](Bar)
+			a, _ := area.In[float64](SquareMetre)
+			var total float64
+			for range window {
+				total += p * a
+			}
+			sinkMeasurement = product.Of(total)
+		}
+	})
+}
