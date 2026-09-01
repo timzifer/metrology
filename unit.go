@@ -23,12 +23,13 @@ import (
 // character by character; 133.32236842105263 is an approximation of it that
 // rounds a second time on every conversion.
 type Unit struct {
-	dim    dimension.Dimension
-	kind   Kind
-	sym    symbol.Symbol
-	num    *apd.Decimal
-	den    *apd.Decimal
-	offset *apd.Decimal
+	dim      dimension.Dimension
+	kind     Kind
+	quantity Quantity
+	sym      symbol.Symbol
+	num      *apd.Decimal
+	den      *apd.Decimal
+	offset   *apd.Decimal
 
 	// interval is the unit a difference of two absolute magnitudes is
 	// expressed in: 25 °C − 20 °C is 5 K, not 5 °C. Optional; without it the
@@ -48,6 +49,11 @@ type UnitDef struct {
 	// Kind distinguishes a point on a scale from a span along it (D6). The
 	// zero value, [Interval], is right for every unit without an offset.
 	Kind Kind
+
+	// Quantity names what is measured where the dimension does not say it:
+	// the hertz and the becquerel are both T⁻¹ and are not the same thing.
+	// Empty for every unit whose dimension belongs to one quantity only.
+	Quantity Quantity
 
 	// Symbol renders the unit and selects its prefixes.
 	Symbol symbol.Symbol
@@ -99,6 +105,7 @@ func NewUnit(def UnitDef) (Unit, error) {
 	return Unit{
 		dim:      def.Dimension,
 		kind:     def.Kind,
+		quantity: def.Quantity,
 		sym:      def.Symbol,
 		num:      num,
 		den:      den,
@@ -136,6 +143,10 @@ func (u Unit) Dimension() dimension.Dimension { return u.dim }
 // Kind reports whether magnitudes in this unit are points or spans (D6).
 func (u Unit) Kind() Kind { return u.kind }
 
+// Quantity reports what this unit measures where its dimension is shared by
+// more than one quantity, and the empty [Quantity] where it is not.
+func (u Unit) Quantity() Quantity { return u.quantity }
+
 // Symbol returns the unit's symbol.
 func (u Unit) Symbol() symbol.Symbol { return u.sym }
 
@@ -162,12 +173,13 @@ func (u Unit) IntervalUnit() (Unit, bool) {
 }
 
 // Equal reports whether two units are the same scale: same dimension, same
-// kind, same symbol, and the same exact factor and offset.
+// kind, same quantity, same symbol, and the same exact factor and offset.
 //
 // The fraction is compared as a value, not digit by digit, so 1/2 equals 5/10.
 func (u Unit) Equal(other Unit) bool {
 	return u.dim == other.dim &&
 		u.kind == other.kind &&
+		u.quantity == other.quantity &&
 		u.sym.Equal(other.sym) &&
 		u.offset.Cmp(other.offset) == 0 &&
 		sameRatio(u.num, u.den, other.num, other.den)

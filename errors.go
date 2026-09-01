@@ -24,6 +24,11 @@ var (
 	// multiplying an absolute at all. See [KindError].
 	ErrKind = errors.New("incompatible kinds")
 
+	// ErrQuantity reports an operation between two different quantities that
+	// happen to share a dimension — a frequency and a radioactivity, an
+	// absorbed dose and a dose equivalent. See [QuantityError].
+	ErrQuantity = errors.New("incompatible quantities")
+
 	// ErrSyntax reports a magnitude or a conversion factor that is not a
 	// decimal number. See [SyntaxError].
 	ErrSyntax = errors.New("not a decimal number")
@@ -76,6 +81,26 @@ func (e *KindError) Error() string {
 
 // Is reports that every KindError matches [ErrKind].
 func (e *KindError) Is(target error) bool { return target == ErrKind }
+
+// QuantityError names the two quantities that share a dimension but not a
+// meaning.
+//
+// It is a separate class from [DimensionError] because the dimensions match:
+// the exponents agree and the numbers would convert, which is exactly what
+// makes the mistake worth reporting.
+type QuantityError struct {
+	Op    string   // the operation that failed: "To", "Add", …
+	Left  Quantity // quantity of the left operand
+	Right Quantity // quantity of the right operand
+}
+
+func (e *QuantityError) Error() string {
+	return fmt.Sprintf("metrology: %s: %s and %s share a dimension but are different quantities",
+		e.Op, e.Left, e.Right)
+}
+
+// Is reports that every QuantityError matches [ErrQuantity].
+func (e *QuantityError) Is(target error) bool { return target == ErrQuantity }
 
 // SyntaxError names the text that could not be read as a decimal.
 type SyntaxError struct {

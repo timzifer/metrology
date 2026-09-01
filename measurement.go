@@ -65,6 +65,9 @@ func (m Measurement) Dimension() dimension.Dimension { return m.unit.dim }
 // Kind reports whether this is a point on a scale or a span along it (D6).
 func (m Measurement) Kind() Kind { return m.unit.kind }
 
+// Quantity reports what is measured, where the dimension does not say it.
+func (m Measurement) Quantity() Quantity { return m.unit.quantity }
+
 // Decimal returns the magnitude in this measurement's own unit, as a copy that
 // shares nothing with the measurement (D3).
 func (m Measurement) Decimal() *apd.Decimal {
@@ -118,6 +121,9 @@ func (e Engine) To(m Measurement, u Unit) (Measurement, error) {
 			Op: "To", Left: m.unit.kind, Right: u.kind,
 			Why: "a point on a scale and a span along it are not the same quantity",
 		}
+	}
+	if !m.unit.quantity.compatible(u.quantity) {
+		return Measurement{}, &QuantityError{Op: "To", Left: m.unit.quantity, Right: u.quantity}
 	}
 	d, err := e.convert(&m.val, m.unit, u)
 	if err != nil {
