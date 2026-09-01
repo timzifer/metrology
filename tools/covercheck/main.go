@@ -82,16 +82,7 @@ func main() {
 	prefixes := splitPrefixes(*excludes)
 	kept, skippedGenerated, skippedExcluded, skippedIgnored := filter(blocks, mod, prefixes)
 
-	var total, covered int
-	uncovered := map[string][]block{}
-	for _, b := range kept {
-		total += b.statements
-		if b.count > 0 {
-			covered += b.statements
-			continue
-		}
-		uncovered[b.file] = append(uncovered[b.file], b)
-	}
+	total, covered, uncovered := summarise(kept)
 
 	pct := 100.0
 	if total > 0 {
@@ -151,6 +142,27 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("covercheck: OK")
+}
+
+// summarise counts the statements of the blocks that count and collects the
+// uncovered ones by file.
+//
+// A block with no statements in it — the body of a marker method such as an
+// analysis fact's AFact — can be neither covered nor uncovered, and reporting
+// it would point the reader at a file with nothing wrong in it.
+func summarise(kept []block) (total, covered int, uncovered map[string][]block) {
+	uncovered = map[string][]block{}
+	for _, b := range kept {
+		total += b.statements
+		switch {
+		case b.count > 0:
+			covered += b.statements
+		case b.statements == 0:
+		default:
+			uncovered[b.file] = append(uncovered[b.file], b)
+		}
+	}
+	return total, covered, uncovered
 }
 
 // writeBadge writes a shields.io endpoint document. Shields renders it through

@@ -48,8 +48,23 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # analysistest loads the corpus under unitvet/testdata with GOPROXY=off,
+      # so whatever that module needs has to be in the module cache before the
+      # tests start. Building it is also the only thing that checks the corpus
+      # still compiles: a testdata directory is invisible to go build ./... .
+      - name: Build the unitvet corpus
+        run: cd unitvet/testdata && go build ./...
+
       - name: Test with race detector
         run: go test -race ./...
+
+      # M6: the checker runs against the library's own code, examples and tests,
+      # where it must stay silent. The two deliberate mistakes the catalogue
+      # tests assert on carry a //unitvet:ignore marker.
+      - name: Dimension check (D13)
+        run: |
+          go build -o "$RUNNER_TEMP/unitvet" ./cmd/unitvet
+          go vet -vettool="$RUNNER_TEMP/unitvet" ./...
 
       # Separate run: -race and -covermode=atomic together are slow and the
       # coverage numbers do not depend on the race detector.
