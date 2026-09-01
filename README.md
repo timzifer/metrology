@@ -1,6 +1,7 @@
 # metrology
 
 [![CI](https://github.com/timzifer/metrology/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/metrology/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftimzifer%2Fmetrology%2Fbadges%2Fcoverage.json)](https://github.com/timzifer/metrology/actions/workflows/ci.yml)
 
 A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, and one package per quantity so that autocompletion doubles
@@ -73,6 +74,11 @@ go run ./tools/covercheck -profile coverage.out
 The project targets 100 % statement coverage of hand-written code, enforced in
 CI. Generated catalogue files are excluded; see D14 for what the target does and
 does not claim.
+
+The coverage badge above is written by the same run that enforces the gate:
+`covercheck -badge` emits a [shields.io endpoint](https://shields.io/badges/endpoint-badge)
+document, which CI publishes to the `badges` branch. The badge therefore shows
+the number the gate measured, and no third-party service is involved.
 
 ## Licence
 

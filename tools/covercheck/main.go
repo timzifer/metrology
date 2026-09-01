@@ -18,10 +18,14 @@
 //
 //	go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 //	go run ./tools/covercheck -profile coverage.out
+//
+// With -badge it also writes a shields.io endpoint document, which is what the
+// coverage badge in the README reads.
 package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -57,6 +61,7 @@ func main() {
 		excludes    = flag.String("exclude", "cmd/,tools/", "comma-separated package prefixes to exclude")
 		minimum     = flag.Float64("min", 100, "required coverage percentage")
 		verbose     = flag.Bool("v", false, "list every uncovered statement, not just a summary")
+		badgePath   = flag.String("badge", "", "write a shields.io endpoint JSON with the measured percentage to this file")
 	)
 	flag.Parse()
 
@@ -97,6 +102,16 @@ func main() {
 	fmt.Printf("  excluded: %d generated, %d by prefix %v, %d marked %s\n",
 		skippedGenerated, skippedExcluded, prefixes, skippedIgnored, ignoreMarker)
 
+	// The badge is written from the same number the gate compares against, so
+	// that a green badge and a passing gate cannot disagree. It is written
+	// before the gate decides, because a badge reading 97 % is exactly what a
+	// failing run should publish.
+	if *badgePath != "" {
+		if err := writeBadge(*badgePath, pct, *minimum); err != nil {
+			fatal("cannot write badge: %v", err)
+		}
+	}
+
 	if len(uncovered) > 0 {
 		files := make([]string, 0, len(uncovered))
 		for f := range uncovered {
@@ -136,6 +151,37 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("covercheck: OK")
+}
+
+// writeBadge writes a shields.io endpoint document. Shields renders it through
+// https://img.shields.io/endpoint?url=… , so the repository publishes the
+// number itself and no third-party service ever sees the coverage data.
+func writeBadge(path string, pct, minimum float64) error {
+	colour := "brightgreen"
+	switch {
+	case pct+1e-9 < minimum:
+		colour = "red"
+	case pct < 100:
+		// Below 100 % but above the configured floor: the gate passes, and the
+		// badge says the target is not met either way.
+		colour = "yellow"
+	}
+	badge := struct {
+		SchemaVersion int    `json:"schemaVersion"`
+		Label         string `json:"label"`
+		Message       string `json:"message"`
+		Color         string `json:"color"`
+	}{
+		SchemaVersion: 1,
+		Label:         "coverage",
+		Message:       fmt.Sprintf("%.1f%%", pct),
+		Color:         colour,
+	}
+	body, err := json.Marshal(badge)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(body, '\n'), 0o644)
 }
 
 func fatal(format string, args ...any) {

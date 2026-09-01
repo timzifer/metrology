@@ -17,6 +17,9 @@ jobs:
   build:
     name: build · vet · test · coverage
     runs-on: ubuntu-latest
+    # Writes the badge branch on pushes to main; everything else is read-only.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -54,7 +57,7 @@ jobs:
         run: go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 
       - name: Coverage gate (D14)
-        run: go run ./tools/covercheck -profile coverage.out
+        run: go run ./tools/covercheck -profile coverage.out -badge coverage-badge.json
 
       - name: Per-function coverage
         if: always()
@@ -67,6 +70,29 @@ jobs:
           name: coverage-profile
           path: coverage.out
           if-no-files-found: ignore
+
+      # The README badge reads this file through the shields.io endpoint API,
+      # so the number on the badge is the number covercheck measured — no
+      # third-party service ever sees the coverage data. The branch holds
+      # nothing but the badge and is rewritten each time, which is why it is an
+      # orphan and force-pushed.
+      - name: Publish the coverage badge
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test -f coverage-badge.json || exit 0
+          work=$(mktemp -d)
+          cp coverage-badge.json "$work/coverage.json"
+          cd "$work"
+          git init -q
+          git checkout -q -b badges
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add coverage.json
+          git commit -q -m "coverage badge for ${GITHUB_SHA}"
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -q --force "$remote" badges
 
   generate:
     name: generated code is up to date
