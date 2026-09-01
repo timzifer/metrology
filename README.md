@@ -1,4 +1,4 @@
-<img src="docs/gopher.png" alt="" width="180" align="right">
+<img src="docs/gopher.png" alt="The Go gopher holding a sign that reads 20 °C + 5 K = 25 °C" width="180" align="right">
 
 # metrology
 
