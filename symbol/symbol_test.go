@@ -32,9 +32,19 @@ func TestString(t *testing.T) {
 		{"product denominator is parenthesised", symbol.Quotient(
 			symbol.SI("J"), symbol.Product(symbol.Gram(), symbol.SI("K")),
 		), "J/(kg·K)"},
-		{"nested quotient denominator", symbol.Quotient(
+		// A solidus binds from the left, so an unbracketed m/s/A would read
+		// back as (m/s)/A — a different dimension from the one written.
+		{"quotient denominator is parenthesised", symbol.Quotient(
 			symbol.SI("m"), symbol.Quotient(symbol.SI("s"), symbol.SI("A")),
-		), "m/s/A"},
+		), "m/(s/A)"},
+		// The same holds for a static symbol that joins two units itself.
+		{"composite static denominator is parenthesised", symbol.Quotient(
+			symbol.Static("b"), symbol.Static("km/h"),
+		), "b/(km/h)"},
+		// An exponent binds to its own symbol, so J/m² needs no brackets.
+		{"an exponent in the denominator does not", symbol.Quotient(
+			symbol.SI("J"), symbol.SIPow("m", 2),
+		), "J/m²"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.s.String(); got != tc.want {

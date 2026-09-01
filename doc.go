@@ -12,6 +12,13 @@
 //	p := pressure.Bar.Of(2.5)
 //	pa, err := p.In[float64](pressure.Pascal)
 //
+// A measurement writes itself as "2.5 bar" — the canonical text form of D12 —
+// through [Measurement.MarshalText], [Measurement.MarshalJSON] and
+// [Measurement.Value]. Reading it back needs a catalogue of units, which this
+// package deliberately has no place to keep (D7): that is the job of
+// github.com/timzifer/metrology/parse, where a parser is a value holding the
+// units it knows.
+//
 // See CONCEPT.md in the repository root for the architecture and the reasoning
 // behind it. Design decisions are referenced throughout the code as D1 … D14.
 //

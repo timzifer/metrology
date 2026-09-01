@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Status** | M4 implemented — the SI is in the catalogue, checked against NIST SP 811 |
+| **Status** | M5 implemented — the text form reads and writes, and round-trips across the catalogue |
 | **Date** | 2026-09-01 |
 | **Module** | `github.com/timzifer/metrology` |
 | **Go** | 1.27 (minimum) |
@@ -361,7 +361,7 @@ readable form — `expected L²M¹T⁻², got L¹M¹T⁻²` — not merely
 
 ### D12 — Text is the canonical exchange format
 
-**Status:** decided
+**Status:** decided; refined in M5, where the reading half met D7
 
 `MarshalText` / `UnmarshalText` as the foundation, with `json.Marshaler`,
 `sql.Scanner` and `driver.Valuer` layered on top. A measurement serialises as
@@ -371,6 +371,31 @@ readable form — `expected L²M¹T⁻², got L¹M¹T⁻²` — not merely
 forces every consumer through `float64` and thereby loses exactly what D2 through
 D4 were built for. The text form preserves the decimal digits. The object form
 stays available as an option but is not the default.
+
+**Writing belongs to the measurement, reading does not.** Writing needs nothing
+but the value: `Measurement` implements `MarshalText`, `MarshalJSON` and
+`driver.Valuer` itself. Reading needs a catalogue — `"bar"` is a unit only
+because something says so — and the core has no catalogue and no registry to put
+one in (D7, D8). The standard decoding interfaces are handed no context, so a
+`Measurement.UnmarshalText` could resolve symbols only out of a package-level
+registry, and every program with units of its own would be locked out of exactly
+the interfaces it needs most.
+
+Reading therefore lives in `parse`, where a parser is a *value* holding the units
+it knows — `parse.Measurement` over the shipped catalogue, `parse.New(mine)` over
+any other — and `parse.Text` is the destination type that carries its parser into
+`json.Unmarshal` and `sql.Scan`. The asymmetry is the honest shape of the
+problem: a symbol table is context, and Go's decoding interfaces pass none.
+
+**What the text does not carry.** It carries a magnitude and a symbol, and
+neither the kind of D6 nor the quantity tag. `"5 K"` is a temperature and a
+temperature difference written the same way; `"5 m²/s"` says nothing about which
+of the quantities on that dimension was meant. A parser resolves both from what
+it has: the kind from `Parser.Prefer` — defaulting to the interval reading,
+because that is the one that composes with an absolute one — and the quantity
+from the catalogue entry the symbol resolves to. An expression such as `"50 N/m²"`
+resolves to no catalogue entry and is therefore untagged, which is what a
+computed magnitude is too (D6), so it converts into any unit of its dimension.
 
 ### D13 — A `go vet` pass that checks dimensions statically
 
@@ -530,6 +555,18 @@ var de *metrology.DimensionError
 if errors.As(err, &de) {
     log.Printf("expected %s, got %s", de.Want, de.Got)
 }
+
+// --- Text: writing is a method, reading is a parser (D12) -------
+
+text, _ := p.MarshalText()                     // "2.5 bar"
+data, _ := json.Marshal(p)                     // "2.5 bar", quoted
+
+m,  err := parse.Measurement("250 kPa")        // the shipped catalogue
+u,  err := parse.Unit("J/(kg·K)")              // expressions resolve too
+mine   := parse.New(myUnits)                   // a catalogue of your own
+
+var field parse.Text                           // and a destination that
+err = json.Unmarshal(data, &field)             // carries its parser along
 ```
 
 Text output picks the SI prefix automatically, in decimal arithmetic rather than
@@ -545,8 +582,9 @@ the powers of ten where the prefix changes.
 | `metrology` | Measurement, Unit, arithmetic, error types, serialisation | M2 |
 | `dimension` | packing, product, quotient, reciprocal, stringer | done (M1) |
 | `symbol` | SI prefixes, product, quotient and special forms | done (M1) |
-| `internal/superscript` | superscript digits for both stringers | done (M1) |
-| `parse` | reading the text form, resolving unit expressions | M5 |
+| `internal/superscript` | superscript digits for both stringers, and reading them back | done (M1, M5) |
+| `internal/decimaltext` | the shape of a decimal, for the core and the parser | done (M5) |
+| `parse` | reading the text form, resolving unit expressions | done (M5) |
 | `catalog` | YAML source plus generator | M3 |
 | `unitvet`, `cmd/unitvet` | static dimension checker per D13 | M6 |
 | `imperial` | customary units, planned; shape per O1 | after M4 |
@@ -827,6 +865,60 @@ package, README. Fuzz test on the parser.
 - fuzzing finds no crash in one hour
 - every exported symbol is documented
 - coverage is 100 % per D14, `COVERAGE_EXCEPTIONS.md` reviewed and short
+
+**Status: done.** The `parse` package reads what the library writes, across the
+whole catalogue, both in the canonical form and in the prefixed display form of
+D9. What the work decided:
+
+- **The parser is a value, not a registry.** D12 above records why, and the shape
+  it forced: `Parser` holds its units, `parse.Text` carries a parser into
+  `json.Unmarshal` and `sql.Scan`, and nothing is registered anywhere at init.
+- **Spellings are enumerated, not guessed.** Every symbol reports the ways it may
+  be written — `Symbol.Spellings` — and the parser indexes exactly those. That is
+  what keeps `cd` the candela rather than a centi-day, and `mmHg` a millimetre of
+  mercury rather than a milli-metre-of-mercury: a static symbol admits no prefix
+  at all, and a prefix is only ever read in front of a symbol whose form declares
+  it. A longest-prefix matcher over the alphabet would have to guess, and would
+  guess wrong on exactly these.
+- **A collision is resolved towards the unit that spells itself that way.** `km`
+  is the kilometre of the catalogue, not the prefixed metre — the same scale
+  either way, but the catalogue entry is the one with the source citation.
+- **The renderer had to become unambiguous before the parser could be exact.**
+  A solidus and a middle dot bind equally and from the left, so `m/(s/A)` and
+  `b/(km/h)` need their brackets — without them they are `(m/s)/A` and `(b/km)/h`,
+  which are different dimensions. The bracketing rule is now on the rendered text
+  rather than on the symbol form, because a static symbol can join two units too.
+  For the same reason a product of a product is flattened on construction: it
+  already rendered flat, so keeping the nesting left two structures for one
+  symbol and made `Symbol.Equal` answer false for two symbols that print alike.
+- **Composing units became public API.** `Unit.Times`, `Unit.Per` and `Unit.Pow`
+  are what an expression is built out of, and a program naming a computed result
+  wants them anyway. They drop kind and quantity exactly as the arithmetic of D6
+  does.
+- **An expression that spells a unit the parser knows is that unit.** `m²/ s`
+  and `m²/s` differ by a blank, and without this only the second would carry the
+  quantity tag of D6. The substitution checks the scale and not only the
+  spelling: a caller's catalogue may spell something `m/s` that is not a metre
+  per second, and naming that would change the factor instead of the tag.
+- **A power of a power is bounded before it is computed.** `(Qm^127)^127` is a
+  factor of half a million digits, and one bracket more is sixty million — all
+  in fourteen characters of input. The parser therefore multiplies the exponents
+  of nested brackets and refuses anything beyond `MaxPower`, the same bound a
+  single power has. Judging the result afterwards would be too late: the fuzzer
+  found this as four workers at full CPU and no executions at all.
+- **The fuzzer earned its place five times over.** Besides the hang above it
+  found a lexer that walked off the end of its input on invalid UTF-8 (the
+  replacement rune is three bytes long and the byte it stands for is one); apd
+  accepting `".-1"` and rendering it as `"0.-1"`, a value whose own text form is
+  not a value; a zero with a positive exponent printing as `"00"`; and the
+  nested-product structure above. The middle two are core defects, not parser
+  defects — reading untrusted text is simply what makes them reachable.
+  `Unit.OfString` now checks the shape of a number itself, through
+  `internal/decimaltext`, which is the one scanner both the core and the parser
+  use.
+- **The magnitude range stays apd's business.** A first draft rejected an
+  exponent beyond ±100000 in the parser; apd rejects it first, so the check was
+  dead code and went.
 
 ### M6 — `unitvet`, the static dimension checker
 

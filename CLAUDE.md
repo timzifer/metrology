@@ -12,12 +12,13 @@ A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
-**Current milestone: M4 → M5.** The core is implemented and the catalogue holds
-the SI: all seven base units, all twenty-two named derived units, and the non-SI
-units of NIST SP 811 that process engineering uses. M5 is the text form — parsing,
-serialisation, fuzzing. The status notes under M1 … M4 in `CONCEPT.md` record what
-each implementation decided. See section 7 of `CONCEPT.md` for the sequence and
-the definition of done for each step.
+**Current milestone: M5 → M6.** The core is implemented, the catalogue holds the
+SI — all seven base units, all twenty-two named derived units, and the non-SI
+units of NIST SP 811 that process engineering uses — and the text form of D12
+reads and writes: `metrology` writes, `parse` reads. M6 is `unitvet`, the static
+dimension checker of D13. The status notes under M1 … M5 in `CONCEPT.md` record
+what each implementation decided. See section 7 of `CONCEPT.md` for the sequence
+and the definition of done for each step.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
@@ -59,6 +60,20 @@ package-level map that something writes to at init time, stop and re-read D7.
 absolute − absolute = interval; absolute + absolute is an error; multiplication
 and division drop the kind entirely. Do not add heuristics that guess a kind for
 a computed result.
+
+**Writing is a method, reading is a parser (D12).** `Measurement` marshals
+itself; nothing in the core resolves a symbol, because resolving one needs a
+catalogue and the core has nowhere to keep it (D7). Reading lives in `parse`,
+where a `Parser` is a value holding its units and `parse.Text` carries one into
+`json.Unmarshal` and `sql.Scan`. Do not add an `UnmarshalText` to `Measurement`
+that reaches for a package-level registry — it would lock out every program with
+units of its own, which is the case the design is built for.
+
+**A symbol's spellings are enumerated, never guessed (D12).** `Symbol.Spellings`
+reports every way a symbol may be written, and the parser indexes exactly those.
+A static symbol takes no prefix at all — that is what keeps `cd` the candela and
+not a centi-day. Do not replace it with a matcher that strips a leading letter
+and hopes.
 
 **Kind and quantity are separate fields (D6).** `Kind` is absolute versus
 interval. `Quantity` is which quantity a shared dimension is being read as — the
