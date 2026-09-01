@@ -28,3 +28,13 @@ var Kilometre = metrology.MustUnit(metrology.UnitDef{
 	Symbol:    symbol.Static("km"),
 	Numerator: "1000",
 })
+
+// Angstrom is a ten-billionth of a metre, the scale of an atomic radius.
+//
+// Source: NIST SP 811 (2008), Appendix B.8
+var Angstrom = metrology.MustUnit(metrology.UnitDef{
+	Dimension:   dim,
+	Symbol:      symbol.Static("Å"),
+	Numerator:   "1",
+	Denominator: "10000000000",
+})

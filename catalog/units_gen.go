@@ -4,53 +4,267 @@ package catalog
 
 import (
 	"github.com/timzifer/metrology"
+	"github.com/timzifer/metrology/absorbeddose"
+	"github.com/timzifer/metrology/acceleration"
+	"github.com/timzifer/metrology/activity"
+	"github.com/timzifer/metrology/angle"
 	"github.com/timzifer/metrology/area"
+	"github.com/timzifer/metrology/capacitance"
+	"github.com/timzifer/metrology/catalytic"
+	"github.com/timzifer/metrology/charge"
+	"github.com/timzifer/metrology/concentration"
+	"github.com/timzifer/metrology/conductance"
+	"github.com/timzifer/metrology/current"
+	"github.com/timzifer/metrology/density"
+	"github.com/timzifer/metrology/dose"
+	"github.com/timzifer/metrology/duration"
+	"github.com/timzifer/metrology/energy"
+	"github.com/timzifer/metrology/fluxdensity"
 	"github.com/timzifer/metrology/force"
+	"github.com/timzifer/metrology/frequency"
+	"github.com/timzifer/metrology/illuminance"
+	"github.com/timzifer/metrology/inductance"
 	"github.com/timzifer/metrology/interval"
+	"github.com/timzifer/metrology/kinematicviscosity"
 	"github.com/timzifer/metrology/length"
+	"github.com/timzifer/metrology/luminosity"
+	"github.com/timzifer/metrology/luminousflux"
+	"github.com/timzifer/metrology/magneticflux"
+	"github.com/timzifer/metrology/mass"
+	"github.com/timzifer/metrology/massflow"
+	"github.com/timzifer/metrology/power"
 	"github.com/timzifer/metrology/pressure"
+	"github.com/timzifer/metrology/ratio"
+	"github.com/timzifer/metrology/resistance"
+	"github.com/timzifer/metrology/solidangle"
+	"github.com/timzifer/metrology/specificheat"
+	"github.com/timzifer/metrology/substance"
+	"github.com/timzifer/metrology/surfacetension"
 	"github.com/timzifer/metrology/temperature"
+	"github.com/timzifer/metrology/thermalconductivity"
+	"github.com/timzifer/metrology/velocity"
+	"github.com/timzifer/metrology/viscosity"
+	"github.com/timzifer/metrology/voltage"
+	"github.com/timzifer/metrology/volume"
+	"github.com/timzifer/metrology/volumeflow"
 )
 
 // all is every unit in the catalogue, ordered by catalogue id.
 var all = []metrology.Unit{
-	pressure.Bar,           // bar
-	temperature.Celsius,    // celsius
-	temperature.Fahrenheit, // fahrenheit
-	temperature.Kelvin,     // kelvin
-	interval.Kelvin,        // kelvin_interval
-	length.Kilometre,       // kilometre
-	length.Metre,           // metre
-	force.Newton,           // newton
-	pressure.Pascal,        // pascal
-	interval.Rankine,       // rankine_interval
-	area.SquareMetre,       // square_metre
-	pressure.Torr,          // torr
+	current.Ampere,                          // ampere
+	length.Angstrom,                         // angstrom
+	area.Are,                                // are
+	pressure.Atmosphere,                     // atmosphere
+	pressure.Bar,                            // bar
+	area.Barn,                               // barn
+	activity.Becquerel,                      // becquerel
+	energy.Calorie,                          // calorie
+	luminosity.Candela,                      // candela
+	temperature.Celsius,                     // celsius
+	charge.Coulomb,                          // coulomb
+	volume.CubicMetre,                       // cubic_metre
+	volumeflow.CubicMetrePerHour,            // cubic_metre_per_hour
+	volumeflow.CubicMetrePerSecond,          // cubic_metre_per_second
+	activity.Curie,                          // curie
+	duration.Day,                            // day
+	force.Dyne,                              // dyne
+	energy.Electronvolt,                     // electronvolt
+	energy.Erg,                              // erg
+	temperature.Fahrenheit,                  // fahrenheit
+	capacitance.Farad,                       // farad
+	fluxdensity.Gauss,                       // gauss
+	density.GramPerLitre,                    // gram_per_litre
+	absorbeddose.Gray,                       // gray
+	area.Hectare,                            // hectare
+	inductance.Henry,                        // henry
+	frequency.Hertz,                         // hertz
+	duration.Hour,                           // hour
+	energy.Joule,                            // joule
+	specificheat.JoulePerKilogramKelvin,     // joule_per_kilogram_kelvin
+	catalytic.Katal,                         // katal
+	temperature.Kelvin,                      // kelvin
+	interval.Kelvin,                         // kelvin_interval
+	mass.Kilogram,                           // kilogram
+	density.KilogramPerCubicMetre,           // kilogram_per_cubic_metre
+	massflow.KilogramPerHour,                // kilogram_per_hour
+	massflow.KilogramPerSecond,              // kilogram_per_second
+	length.Kilometre,                        // kilometre
+	velocity.KilometrePerHour,               // kilometre_per_hour
+	energy.KilowattHour,                     // kilowatt_hour
+	volume.Litre,                            // litre
+	volumeflow.LitrePerMinute,               // litre_per_minute
+	luminousflux.Lumen,                      // lumen
+	illuminance.Lux,                         // lux
+	magneticflux.Maxwell,                    // maxwell
+	length.Metre,                            // metre
+	velocity.MetrePerSecond,                 // metre_per_second
+	acceleration.MetrePerSecondSquared,      // metre_per_second_squared
+	pressure.MillimetreOfMercury,            // millimetre_of_mercury
+	pressure.MillimetreOfWater,              // millimetre_of_water
+	duration.Minute,                         // minute
+	substance.Mole,                          // mole
+	concentration.MolePerCubicMetre,         // mole_per_cubic_metre
+	concentration.MolePerLitre,              // mole_per_litre
+	force.Newton,                            // newton
+	surfacetension.NewtonPerMetre,           // newton_per_metre
+	resistance.Ohm,                          // ohm
+	ratio.One,                               // one
+	pressure.Pascal,                         // pascal
+	viscosity.PascalSecond,                  // pascal_second
+	ratio.Percent,                           // percent
+	ratio.PerMille,                          // permille
+	viscosity.Poise,                         // poise
+	ratio.PartsPerBillion,                   // ppb
+	ratio.PartsPerMillion,                   // ppm
+	angle.Radian,                            // radian
+	interval.Rankine,                        // rankine_interval
+	dose.Rem,                                // rem
+	duration.Second,                         // second
+	conductance.Siemens,                     // siemens
+	dose.Sievert,                            // sievert
+	area.SquareMetre,                        // square_metre
+	kinematicviscosity.SquareMetrePerSecond, // square_metre_per_second
+	solidangle.Steradian,                    // steradian
+	kinematicviscosity.Stokes,               // stokes
+	fluxdensity.Tesla,                       // tesla
+	mass.Tonne,                              // tonne
+	pressure.Torr,                           // torr
+	voltage.Volt,                            // volt
+	power.Watt,                              // watt
+	thermalconductivity.WattPerMetreKelvin,  // watt_per_metre_kelvin
+	magneticflux.Weber,                      // weber
 }
 
-// canonical maps a dimension and kind to the unit a result computed into
-// that dimension is expressed in.
+// canonical maps a dimension, kind and quantity to the unit a result
+// computed into that dimension is expressed in.
 var canonical = map[key]metrology.Unit{
-	{dim: temperature.Kelvin.Dimension(), kind: metrology.Absolute}: temperature.Kelvin,
-	{dim: interval.Kelvin.Dimension(), kind: metrology.Interval}:    interval.Kelvin,
-	{dim: length.Metre.Dimension(), kind: metrology.Interval}:       length.Metre,
-	{dim: force.Newton.Dimension(), kind: metrology.Interval}:       force.Newton,
-	{dim: pressure.Pascal.Dimension(), kind: metrology.Interval}:    pressure.Pascal,
-	{dim: area.SquareMetre.Dimension(), kind: metrology.Interval}:   area.SquareMetre,
+	{dim: current.Ampere.Dimension(), kind: metrology.Interval, quantity: ""}:                                             current.Ampere,
+	{dim: activity.Becquerel.Dimension(), kind: metrology.Interval, quantity: "radioactivity"}:                            activity.Becquerel,
+	{dim: luminosity.Candela.Dimension(), kind: metrology.Interval, quantity: "luminous intensity"}:                       luminosity.Candela,
+	{dim: charge.Coulomb.Dimension(), kind: metrology.Interval, quantity: ""}:                                             charge.Coulomb,
+	{dim: volume.CubicMetre.Dimension(), kind: metrology.Interval, quantity: ""}:                                          volume.CubicMetre,
+	{dim: volumeflow.CubicMetrePerSecond.Dimension(), kind: metrology.Interval, quantity: ""}:                             volumeflow.CubicMetrePerSecond,
+	{dim: capacitance.Farad.Dimension(), kind: metrology.Interval, quantity: ""}:                                          capacitance.Farad,
+	{dim: absorbeddose.Gray.Dimension(), kind: metrology.Interval, quantity: "absorbed dose"}:                             absorbeddose.Gray,
+	{dim: inductance.Henry.Dimension(), kind: metrology.Interval, quantity: ""}:                                           inductance.Henry,
+	{dim: frequency.Hertz.Dimension(), kind: metrology.Interval, quantity: "frequency"}:                                   frequency.Hertz,
+	{dim: energy.Joule.Dimension(), kind: metrology.Interval, quantity: ""}:                                               energy.Joule,
+	{dim: specificheat.JoulePerKilogramKelvin.Dimension(), kind: metrology.Interval, quantity: ""}:                        specificheat.JoulePerKilogramKelvin,
+	{dim: catalytic.Katal.Dimension(), kind: metrology.Interval, quantity: ""}:                                            catalytic.Katal,
+	{dim: temperature.Kelvin.Dimension(), kind: metrology.Absolute, quantity: ""}:                                         temperature.Kelvin,
+	{dim: interval.Kelvin.Dimension(), kind: metrology.Interval, quantity: ""}:                                            interval.Kelvin,
+	{dim: mass.Kilogram.Dimension(), kind: metrology.Interval, quantity: ""}:                                              mass.Kilogram,
+	{dim: density.KilogramPerCubicMetre.Dimension(), kind: metrology.Interval, quantity: ""}:                              density.KilogramPerCubicMetre,
+	{dim: massflow.KilogramPerSecond.Dimension(), kind: metrology.Interval, quantity: ""}:                                 massflow.KilogramPerSecond,
+	{dim: luminousflux.Lumen.Dimension(), kind: metrology.Interval, quantity: "luminous flux"}:                            luminousflux.Lumen,
+	{dim: illuminance.Lux.Dimension(), kind: metrology.Interval, quantity: ""}:                                            illuminance.Lux,
+	{dim: length.Metre.Dimension(), kind: metrology.Interval, quantity: ""}:                                               length.Metre,
+	{dim: velocity.MetrePerSecond.Dimension(), kind: metrology.Interval, quantity: ""}:                                    velocity.MetrePerSecond,
+	{dim: acceleration.MetrePerSecondSquared.Dimension(), kind: metrology.Interval, quantity: ""}:                         acceleration.MetrePerSecondSquared,
+	{dim: substance.Mole.Dimension(), kind: metrology.Interval, quantity: ""}:                                             substance.Mole,
+	{dim: concentration.MolePerCubicMetre.Dimension(), kind: metrology.Interval, quantity: ""}:                            concentration.MolePerCubicMetre,
+	{dim: force.Newton.Dimension(), kind: metrology.Interval, quantity: ""}:                                               force.Newton,
+	{dim: surfacetension.NewtonPerMetre.Dimension(), kind: metrology.Interval, quantity: ""}:                              surfacetension.NewtonPerMetre,
+	{dim: resistance.Ohm.Dimension(), kind: metrology.Interval, quantity: ""}:                                             resistance.Ohm,
+	{dim: ratio.One.Dimension(), kind: metrology.Interval, quantity: ""}:                                                  ratio.One,
+	{dim: pressure.Pascal.Dimension(), kind: metrology.Interval, quantity: ""}:                                            pressure.Pascal,
+	{dim: viscosity.PascalSecond.Dimension(), kind: metrology.Interval, quantity: ""}:                                     viscosity.PascalSecond,
+	{dim: angle.Radian.Dimension(), kind: metrology.Interval, quantity: "plane angle"}:                                    angle.Radian,
+	{dim: duration.Second.Dimension(), kind: metrology.Interval, quantity: ""}:                                            duration.Second,
+	{dim: conductance.Siemens.Dimension(), kind: metrology.Interval, quantity: ""}:                                        conductance.Siemens,
+	{dim: dose.Sievert.Dimension(), kind: metrology.Interval, quantity: "dose equivalent"}:                                dose.Sievert,
+	{dim: area.SquareMetre.Dimension(), kind: metrology.Interval, quantity: ""}:                                           area.SquareMetre,
+	{dim: kinematicviscosity.SquareMetrePerSecond.Dimension(), kind: metrology.Interval, quantity: "kinematic viscosity"}: kinematicviscosity.SquareMetrePerSecond,
+	{dim: solidangle.Steradian.Dimension(), kind: metrology.Interval, quantity: "solid angle"}:                            solidangle.Steradian,
+	{dim: fluxdensity.Tesla.Dimension(), kind: metrology.Interval, quantity: ""}:                                          fluxdensity.Tesla,
+	{dim: voltage.Volt.Dimension(), kind: metrology.Interval, quantity: ""}:                                               voltage.Volt,
+	{dim: power.Watt.Dimension(), kind: metrology.Interval, quantity: ""}:                                                 power.Watt,
+	{dim: thermalconductivity.WattPerMetreKelvin.Dimension(), kind: metrology.Interval, quantity: ""}:                     thermalconductivity.WattPerMetreKelvin,
+	{dim: magneticflux.Weber.Dimension(), kind: metrology.Interval, quantity: ""}:                                         magneticflux.Weber,
 }
 
 // bySymbol resolves the printed form of a unit back to the unit.
 var bySymbol = map[symbolKey]metrology.Unit{
-	{text: "bar", kind: metrology.Interval}:  pressure.Bar,
-	{text: "°C", kind: metrology.Absolute}:   temperature.Celsius,
-	{text: "°F", kind: metrology.Absolute}:   temperature.Fahrenheit,
-	{text: "K", kind: metrology.Absolute}:    temperature.Kelvin,
-	{text: "K", kind: metrology.Interval}:    interval.Kelvin,
-	{text: "km", kind: metrology.Interval}:   length.Kilometre,
-	{text: "m", kind: metrology.Interval}:    length.Metre,
-	{text: "N", kind: metrology.Interval}:    force.Newton,
-	{text: "Pa", kind: metrology.Interval}:   pressure.Pascal,
-	{text: "°R", kind: metrology.Interval}:   interval.Rankine,
-	{text: "m²", kind: metrology.Interval}:   area.SquareMetre,
-	{text: "Torr", kind: metrology.Interval}: pressure.Torr,
+	{text: "A", kind: metrology.Interval}:        current.Ampere,
+	{text: "Å", kind: metrology.Interval}:        length.Angstrom,
+	{text: "a", kind: metrology.Interval}:        area.Are,
+	{text: "atm", kind: metrology.Interval}:      pressure.Atmosphere,
+	{text: "bar", kind: metrology.Interval}:      pressure.Bar,
+	{text: "b", kind: metrology.Interval}:        area.Barn,
+	{text: "Bq", kind: metrology.Interval}:       activity.Becquerel,
+	{text: "cal", kind: metrology.Interval}:      energy.Calorie,
+	{text: "cd", kind: metrology.Interval}:       luminosity.Candela,
+	{text: "°C", kind: metrology.Absolute}:       temperature.Celsius,
+	{text: "C", kind: metrology.Interval}:        charge.Coulomb,
+	{text: "m³", kind: metrology.Interval}:       volume.CubicMetre,
+	{text: "m³/h", kind: metrology.Interval}:     volumeflow.CubicMetrePerHour,
+	{text: "m³/s", kind: metrology.Interval}:     volumeflow.CubicMetrePerSecond,
+	{text: "Ci", kind: metrology.Interval}:       activity.Curie,
+	{text: "d", kind: metrology.Interval}:        duration.Day,
+	{text: "dyn", kind: metrology.Interval}:      force.Dyne,
+	{text: "eV", kind: metrology.Interval}:       energy.Electronvolt,
+	{text: "erg", kind: metrology.Interval}:      energy.Erg,
+	{text: "°F", kind: metrology.Absolute}:       temperature.Fahrenheit,
+	{text: "F", kind: metrology.Interval}:        capacitance.Farad,
+	{text: "G", kind: metrology.Interval}:        fluxdensity.Gauss,
+	{text: "g/L", kind: metrology.Interval}:      density.GramPerLitre,
+	{text: "Gy", kind: metrology.Interval}:       absorbeddose.Gray,
+	{text: "ha", kind: metrology.Interval}:       area.Hectare,
+	{text: "H", kind: metrology.Interval}:        inductance.Henry,
+	{text: "Hz", kind: metrology.Interval}:       frequency.Hertz,
+	{text: "h", kind: metrology.Interval}:        duration.Hour,
+	{text: "J", kind: metrology.Interval}:        energy.Joule,
+	{text: "J/(kg·K)", kind: metrology.Interval}: specificheat.JoulePerKilogramKelvin,
+	{text: "kat", kind: metrology.Interval}:      catalytic.Katal,
+	{text: "K", kind: metrology.Absolute}:        temperature.Kelvin,
+	{text: "K", kind: metrology.Interval}:        interval.Kelvin,
+	{text: "kg", kind: metrology.Interval}:       mass.Kilogram,
+	{text: "kg/m³", kind: metrology.Interval}:    density.KilogramPerCubicMetre,
+	{text: "kg/h", kind: metrology.Interval}:     massflow.KilogramPerHour,
+	{text: "kg/s", kind: metrology.Interval}:     massflow.KilogramPerSecond,
+	{text: "km", kind: metrology.Interval}:       length.Kilometre,
+	{text: "km/h", kind: metrology.Interval}:     velocity.KilometrePerHour,
+	{text: "kWh", kind: metrology.Interval}:      energy.KilowattHour,
+	{text: "L", kind: metrology.Interval}:        volume.Litre,
+	{text: "L/min", kind: metrology.Interval}:    volumeflow.LitrePerMinute,
+	{text: "lm", kind: metrology.Interval}:       luminousflux.Lumen,
+	{text: "lx", kind: metrology.Interval}:       illuminance.Lux,
+	{text: "Mx", kind: metrology.Interval}:       magneticflux.Maxwell,
+	{text: "m", kind: metrology.Interval}:        length.Metre,
+	{text: "m/s", kind: metrology.Interval}:      velocity.MetrePerSecond,
+	{text: "m/s²", kind: metrology.Interval}:     acceleration.MetrePerSecondSquared,
+	{text: "mmHg", kind: metrology.Interval}:     pressure.MillimetreOfMercury,
+	{text: "mmH₂O", kind: metrology.Interval}:    pressure.MillimetreOfWater,
+	{text: "min", kind: metrology.Interval}:      duration.Minute,
+	{text: "mol", kind: metrology.Interval}:      substance.Mole,
+	{text: "mol/m³", kind: metrology.Interval}:   concentration.MolePerCubicMetre,
+	{text: "mol/L", kind: metrology.Interval}:    concentration.MolePerLitre,
+	{text: "N", kind: metrology.Interval}:        force.Newton,
+	{text: "N/m", kind: metrology.Interval}:      surfacetension.NewtonPerMetre,
+	{text: "Ω", kind: metrology.Interval}:        resistance.Ohm,
+	{text: "1", kind: metrology.Interval}:        ratio.One,
+	{text: "Pa", kind: metrology.Interval}:       pressure.Pascal,
+	{text: "Pa·s", kind: metrology.Interval}:     viscosity.PascalSecond,
+	{text: "%", kind: metrology.Interval}:        ratio.Percent,
+	{text: "‰", kind: metrology.Interval}:        ratio.PerMille,
+	{text: "P", kind: metrology.Interval}:        viscosity.Poise,
+	{text: "ppb", kind: metrology.Interval}:      ratio.PartsPerBillion,
+	{text: "ppm", kind: metrology.Interval}:      ratio.PartsPerMillion,
+	{text: "rad", kind: metrology.Interval}:      angle.Radian,
+	{text: "°R", kind: metrology.Interval}:       interval.Rankine,
+	{text: "rem", kind: metrology.Interval}:      dose.Rem,
+	{text: "s", kind: metrology.Interval}:        duration.Second,
+	{text: "S", kind: metrology.Interval}:        conductance.Siemens,
+	{text: "Sv", kind: metrology.Interval}:       dose.Sievert,
+	{text: "m²", kind: metrology.Interval}:       area.SquareMetre,
+	{text: "m²/s", kind: metrology.Interval}:     kinematicviscosity.SquareMetrePerSecond,
+	{text: "sr", kind: metrology.Interval}:       solidangle.Steradian,
+	{text: "St", kind: metrology.Interval}:       kinematicviscosity.Stokes,
+	{text: "T", kind: metrology.Interval}:        fluxdensity.Tesla,
+	{text: "t", kind: metrology.Interval}:        mass.Tonne,
+	{text: "Torr", kind: metrology.Interval}:     pressure.Torr,
+	{text: "V", kind: metrology.Interval}:        voltage.Volt,
+	{text: "W", kind: metrology.Interval}:        power.Watt,
+	{text: "W/(m·K)", kind: metrology.Interval}:  thermalconductivity.WattPerMetreKelvin,
+	{text: "Wb", kind: metrology.Interval}:       magneticflux.Weber,
 }

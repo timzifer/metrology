@@ -29,6 +29,15 @@ var Bar = metrology.MustUnit(metrology.UnitDef{
 	Numerator: "100000",
 })
 
+// Atmosphere is the standard atmosphere, 101325 Pa by definition.
+//
+// Source: NIST SP 811 (2008), Appendix B.8
+var Atmosphere = metrology.MustUnit(metrology.UnitDef{
+	Dimension: dim,
+	Symbol:    symbol.Static("atm"),
+	Numerator: "101325",
+})
+
 // Torr is one 760th of the standard atmosphere.
 //
 // Source: NIST SP 811 (2008), Appendix B.8
@@ -37,4 +46,22 @@ var Torr = metrology.MustUnit(metrology.UnitDef{
 	Symbol:      symbol.Static("Torr"),
 	Numerator:   "101325",
 	Denominator: "760",
+})
+
+// MillimetreOfMercury is the conventional millimetre of mercury, as used in blood pressure.
+//
+// Source: NIST SP 811 (2008), Appendix B.8
+var MillimetreOfMercury = metrology.MustUnit(metrology.UnitDef{
+	Dimension: dim,
+	Symbol:    symbol.Static("mmHg"),
+	Numerator: "133.322387415",
+})
+
+// MillimetreOfWater is the conventional millimetre of water, as used for draught and filter pressure.
+//
+// Source: NIST SP 811 (2008), Appendix B.8
+var MillimetreOfWater = metrology.MustUnit(metrology.UnitDef{
+	Dimension: dim,
+	Symbol:    symbol.Static("mmH₂O"),
+	Numerator: "9.80665",
 })

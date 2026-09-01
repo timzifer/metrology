@@ -46,7 +46,9 @@ func emitQuantity(module string, q quantity, byID map[string]unitSpec) ([]byte, 
 		q.Dimension.dimensionExpr())
 
 	for _, u := range q.Units {
-		if err := emitUnit(&b, u, q, byID); err != nil {
+		// Take the resolved spec: the one hanging off the quantity knows which
+		// package it belongs to, the one in the YAML struct does not.
+		if err := emitUnit(&b, byID[u.ID], q, byID); err != nil {
 			return nil, err
 		}
 	}
@@ -71,6 +73,9 @@ func emitUnit(b *bytes.Buffer, u unitSpec, q quantity, byID map[string]unitSpec)
 	fmt.Fprintln(b, "Dimension: dim,")
 	if u.isAbsolute() {
 		fmt.Fprintf(b, "Kind: %s,\n", u.kindExpr())
+	}
+	if u.quantityTag() != "" {
+		fmt.Fprintf(b, "Quantity: %q,\n", u.quantityTag())
 	}
 	fmt.Fprintf(b, "Symbol: %s,\n", symbolExpr)
 	if u.Factor.Num != "" {
@@ -121,15 +126,15 @@ func emitIndex(module string, c *catalogue) ([]byte, error) {
 	}
 	fmt.Fprint(&b, "}\n\n")
 
-	fmt.Fprintln(&b, "// canonical maps a dimension and kind to the unit a result computed into")
-	fmt.Fprintln(&b, "// that dimension is expressed in.")
+	fmt.Fprintln(&b, "// canonical maps a dimension, kind and quantity to the unit a result")
+	fmt.Fprintln(&b, "// computed into that dimension is expressed in.")
 	fmt.Fprintln(&b, "var canonical = map[key]metrology.Unit{")
 	for _, u := range units {
 		if !u.Canonical {
 			continue
 		}
-		fmt.Fprintf(&b, "{dim: %s.%s.Dimension(), kind: %s}: %s,\n",
-			u.quantity.Package, u.Go, u.kindExpr(), u.qualified())
+		fmt.Fprintf(&b, "{dim: %s.%s.Dimension(), kind: %s, quantity: %q}: %s,\n",
+			u.quantity.Package, u.Go, u.kindExpr(), u.quantityTag(), u.qualified())
 	}
 	fmt.Fprint(&b, "}\n\n")
 

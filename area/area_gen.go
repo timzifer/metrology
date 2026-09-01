@@ -19,3 +19,31 @@ var SquareMetre = metrology.MustUnit(metrology.UnitDef{
 	Dimension: dim,
 	Symbol:    symbol.SIPow("m", 2),
 })
+
+// Are is a hundred square metres.
+//
+// Source: NIST SP 811 (2008), Appendix B.8
+var Are = metrology.MustUnit(metrology.UnitDef{
+	Dimension: dim,
+	Symbol:    symbol.Static("a"),
+	Numerator: "100",
+})
+
+// Hectare is ten thousand square metres.
+//
+// Source: SI Brochure 9th ed., §4.1 Table 8
+var Hectare = metrology.MustUnit(metrology.UnitDef{
+	Dimension: dim,
+	Symbol:    symbol.Static("ha"),
+	Numerator: "10000",
+})
+
+// Barn is the nuclear cross-section unit, 10⁻²⁸ m².
+//
+// Source: NIST SP 811 (2008), Appendix B.8
+var Barn = metrology.MustUnit(metrology.UnitDef{
+	Dimension:   dim,
+	Symbol:      symbol.Static("b"),
+	Numerator:   "1",
+	Denominator: "10000000000000000000000000000",
+})
