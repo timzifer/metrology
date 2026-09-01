@@ -392,8 +392,9 @@ go test -run '^$' -bench BenchmarkConvert -benchmem .
 ```
 
 Absolute figures are a property of the machine — a re-run on a shared cloud VM
-gives 385 / 515 / 677 ns for the three precisions and 0.58 ns for `float64` — and
-the ratios move with the machine too. What does not move is the shape: the
+gives 372 / 504 / 685 ns for the three precisions and 0.6 ns for `float64`, the
+median of five runs, and README.md tabulates that whole run — and the ratios move
+with the machine too. What does not move is the shape: the
 default allocates once per conversion, decimal128 allocates five to seven times,
 50 digits again about twice that, and every step costs time without benefiting
 any physical measurement — no sensor in this domain delivers more than six to
