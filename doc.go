@@ -18,3 +18,9 @@
 // This package is under construction; see the milestones in CONCEPT.md for what
 // exists today.
 package metrology
+
+// The quantity packages and the catalogue index are generated from the YAML
+// catalogue (D8). Never edit a file carrying the "Code generated" line: change
+// catalog/catalog.yaml and run this.
+//
+//go:generate go run ./tools/catgen
