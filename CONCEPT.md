@@ -10,7 +10,7 @@
 | **State** | complete for the scope of section 6; `v1.0.0` awaits the API review of section 7 |
 
 This document holds the architecture and the reasoning behind it. The decisions
-are numbered D1 … D14 and referenced from code comments; a change that
+are numbered D1 … D15 and referenced from code comments; a change that
 contradicts one updates the decision first, in the same pull request, with the
 reason. Silent divergence between this document and the code is the failure mode
 it exists to prevent.
@@ -88,8 +88,9 @@ again:
 
 The one honest cost: metrology as a field also covers calibration, traceability
 and uncertainty, and uncertainty is deferred (section 8). The name promises
-slightly more than v1 delivers. `metrology/uncertainty` is the natural home when
-that changes.
+slightly more than v1 delivers. `metrology/uncertainty` was named here as the
+natural home when that changes; D15 makes it the decided one, for the interval
+half of the topic, and section 8 says which half stays deferred.
 
 No `go-` prefix: that convention marks a Go binding to something else
 (`go-redis`, `go-sql-driver`), and the last path element becomes the default
@@ -418,7 +419,9 @@ division by zero and context violations are errors.
 This also settles a related question: the library does **not** track significant
 figures. Whether a value was measured as `2.50` or `2.5` is lost. That is
 deliberate — measurement uncertainty is a topic of its own (section 8), not a
-by-product of number representation.
+by-product of number representation. D15 does not change this: the rule that
+reads `[3.65, 3.75]` out of the literal `3.7` lives in a parser, at the
+boundary, and never in a magnitude.
 
 ### D10 — Generic methods at the system boundary
 
@@ -711,6 +714,120 @@ with no statements — an empty `AFact` method body — are neither covered nor
 uncovered and are not listed. The per-function output is part of the CI log,
 because "which function dropped" is the only useful form of a coverage failure.
 
+### D15 — Uncertainty as a layer: `metrology/uncertainty`
+
+**Status:** decided; the package is not built yet.
+
+Section 8 has deferred measurement uncertainty from the beginning, with a
+justification that still holds: it is a large topic of its own with its own
+error propagation, and it belongs on top of the core rather than in it. What
+that entry did not say is *where* the layer lives, and this decision answers
+only that — the layer is a subpackage of this module, `metrology/uncertainty`,
+and not a separate library.
+
+**Why here and not elsewhere.** The alternative was a library of its own, and it
+loses three things at once. Conversion is where the layer is hardest (see the
+rounding finding below), and a conversion implemented outside this module would
+be a second implementation of D4 — exactly the drift the generated `unitvet`
+table exists to prevent one level up. The kind rules of D6 apply to an interval
+unchanged and would otherwise be restated by somebody who has not read them. And
+`unitvet` resolves receivers by type name against a table generated from the
+catalogue: a type outside the module is a type the checker cannot be taught
+without exporting its table.
+
+**Why not in the core.** The refusal in section 8 was right about the substance.
+This is *interval arithmetic*, not uncertainty propagation in the sense of the
+GUM: it gives worst-case bounds and it has the dependency problem — `x − x` is
+not zero, `x / x` is not one, and a formula naming a variable twice over-widens.
+For checking a published number that is acceptable and even conservative: a
+wider interval never invents a disagreement, it can only hide one. As a general
+uncertainty budget it is wrong, and a `Measurement` that carried bounds would
+put that wrongness in every value in the library. The package name has to carry
+the warning too, and the package doc says it on the first line.
+
+**The type.** One unit, two exact magnitudes:
+
+```go
+package uncertainty
+
+// Range is a magnitude known only to lie between two bounds, on one scale.
+type Range struct { /* unit Unit; lo, hi apd.Decimal */ }
+
+func Of(m metrology.Measurement) Range                       // a point
+func Between(lo, hi metrology.Measurement) (Range, error)    // same unit required
+func Symmetric(m, tol metrology.Measurement) (Range, error)  // 3.7 ± 0.2
+
+func (r Range) Lo() metrology.Measurement
+func (r Range) Hi() metrology.Measurement
+func (r Range) Mid() metrology.Measurement
+func (r Range) Width() metrology.Measurement                 // an interval-kind measurement
+func (r Range) Overlaps(o Range) (bool, error)
+func (r Range) To(u metrology.Unit) (Range, error)
+func (r Range) Add(o Range) (Range, error)                   // Sub, Mul, Div, Pow
+func (r Range) MarshalText() ([]byte, error)
+```
+
+One unit and two magnitudes rather than two measurements, because a range whose
+ends are in different units is a state the type must not be able to hold — and
+because it makes the inheritance from D6 exact.
+
+**How it composes with the decisions already made.**
+
+| Decision | How it applies |
+|---|---|
+| D3, immutability | Two `apd.Decimal` fields, written only at construction via `Set`, exactly as `Measurement` does. The aliasing guard grows a `Range` case; the 200-digit rule applies unchanged, and for the same reason. |
+| D4, exact fractions | Conversion is the same `(v + offset) · num / den` on each bound — with one amendment, below. |
+| D6, kind and quantity | Free, and pleasingly so. Both bounds share one unit, so an absolute range such as 20 ± 0.5 °C is meaningful; `Width` returns an **interval**-kind measurement because absolute − absolute = interval is already the rule; and multiplying two absolute ranges is already an error. D6 needs no new clause. |
+| D7, no global state | Value types and functions. Reading text needs a symbol table, so a range parser is a value built over a `parse.Parser`, and the asymmetry of D12 repeats verbatim. |
+| D9, precision | The significant-digit rule stays *outside* the type. Deriving `[3.65, 3.75]` from the literal `3.7` is a reading rule and lives in the parser, not in `Range`. D9 does not start tracking significant figures. |
+| D14, coverage | Pure computation, no I/O, no clock. The 100 % rule holds with no exception. |
+
+**The text form, and why `±` cannot be the canonical one.** Every product and
+quotient of two ranges is asymmetric, and neither `3.7 ± 0.2` nor `3.7(2)` can
+write an asymmetric interval. The canonical form is therefore the bracket form,
+`[3.65, 3.75] cm²/s`, which reads back as exactly what it says; `±` and the
+compact parenthesis form are **accepted on input** and produced by a display
+method where the range happens to be symmetric. That is the split D12 already
+makes between `String` and `Prefixed`, for the same reason: the canonical text
+has to read back as the same value, and the pleasant form is a rendering choice.
+
+**The finding that makes this more than a wrapper: interval conversion must
+round outward.** D9 rounds half-even to the context precision at the one
+division of a conversion. For a point that is right. For an interval *bound* it
+is wrong: rounding a bound inward narrows the interval, and a narrowed interval
+can turn an overlap into a disjoint pair — a disagreement manufactured by the
+conversion and standing in no source. So `Lo` rounds toward −∞ and `Hi` toward
++∞. `apd` has both modes; what this module does not expose today is a way to ask
+an engine for one, so D15 requires one additive change to the core:
+
+```go
+func (e Engine) Rounding(mode apd.Rounding) Engine
+```
+
+The zero `Engine` is unchanged and D9 is intact — this is a second rounding
+policy in a library that had exactly one, invisible unless asked for. The
+arithmetic tests gain the assertion that directed rounding never narrows a
+range. The alternative, `uncertainty` building an `apd.Context` of its own and
+duplicating D4's conversion path, is worse for the reason at the top of this
+decision.
+
+**`unitvet` learns the second receiver type (D13).** A range added to a range of
+another dimension is exactly the provable class the checker exists for. Staying
+silent on it would not be D13's silence on doubt — that rule is about operands
+the pass cannot resolve, not about a type it was never told exists. This is the
+largest single cost of D15 and it is not optional: a checker that goes blind
+precisely where the arithmetic moved would be worse than no checker, because
+users would not notice.
+
+**What it costs.** A second arithmetic surface — five operations, each with the
+corner analysis that a point does not need: all four products for `Mul`, because
+an interval straddling zero does not take its extreme at the corner one would
+guess, and a divisor whose interval covers zero is an error rather than a bound,
+because the quotient is unbounded and reporting a bound for it would be a lie
+about the data. A rounding mode on `Engine` where there was one. A `unitvet`
+receiver. And section 7 gains an item: whether `Range` is part of the `v1.0.0`
+surface or ships behind it.
+
 ---
 
 ## 4. The API
@@ -803,6 +920,7 @@ err = json.Unmarshal(data, &field)             // carries its parser along
 | `dimension` | the packed word, product, quotient, reciprocal, stringer |
 | `symbol` | SI prefixes, product, quotient and the special forms, spellings |
 | `parse` | reading the text form, resolving unit expressions, `parse.Text` |
+| `uncertainty` | the interval layer of D15 — a magnitude known only to lie between two bounds (planned) |
 | `catalog` | the YAML source, the generated index, and the lookups over it |
 | `unitvet`, `cmd/unitvet` | the static dimension checker of D13 |
 | `internal/superscript` | superscript digits for both stringers, and reading them back |
@@ -889,6 +1007,7 @@ Everything the decisions describe is implemented and enforced:
 | Text form: writing, `parse`, JSON, SQL | complete; the round-trip property holds across the whole catalogue and the parser is fuzzed against it |
 | `unitvet` | complete; the corpus asserts the reported and the silent cases alike, and the pass runs clean over this repository, tests and examples included |
 | Coverage gate | 100 % of hand-written statements, enforced in CI, `COVERAGE_EXCEPTIONS.md` empty |
+| `uncertainty` (D15) | **decided, not built.** The package, the outward rounding it needs from `Engine`, its text form and its `unitvet` receiver are all specified in D15 and none of them exists yet |
 
 **What remains before `v1.0.0` is a deliberate API review.** Until it happens the
 module is tagged `v0.x` and the API may change without notice; any stability
@@ -925,6 +1044,15 @@ at minimum:
   back tagged `frequency`, `50 s⁻¹` reads back untagged, and the two are the same
   scale. The text form cannot carry a tag of its own (section 8), so the spelling
   decides — which is a v1 question rather than a later one.
+- whether `Engine.Rounding` belongs in the frozen surface. D15 needs it — an
+  interval bound has to round outward, or a conversion can manufacture a
+  disagreement that stands in no source — and it is the one addition to the core
+  that decision makes. It is additive and invisible in the zero `Engine`, so it
+  breaks nothing; but it is a second rounding policy in a library that had
+  exactly one, and the review should see it rather than inherit it
+- whether `uncertainty.Range` ships inside `v1.0.0` or behind it. The layer is
+  decided (D15) and unbuilt, and freezing the core while the first serious
+  consumer of it is unwritten is how an API gains a regret
 - `O1` in section 10, which decides whether `imperial` is a subpackage or a module
 - `O2` in section 10, which decides whether the arithmetic is a type parameter of
   `Measurement`. Only that half of it cannot be deferred past `v1.0.0` —
@@ -944,7 +1072,7 @@ additive, opt-in, and can ship a new version independently.
 | Fractional exponents | Occur in correlations (e.g. `m·s⁻⁰·⁵`) but require rationals instead of `int8` in the dimension word. The eight reserved bits from D5 keep that door open. |
 | Units defined through π | The degree of arc, the gon, the oersted. Their factors are rational multiples of π and have no finite decimal form, so D4 cannot store them exactly. Needs a symbolic factor — a fraction plus a π exponent — which changes the shape of every conversion. Left out of the catalogue rather than rounded into it. |
 | Quantities sharing a dimension *and* a symbol | Thermal diffusivity and a diffusion coefficient print as `m²/s`, like kinematic viscosity. The quantity tag of D6 separates them in code, but the text form of D12 has to read back to one unit. Needs a text form that carries the quantity. |
-| Measurement uncertainty | A large topic of its own with its own error propagation. Sensible as a layer on top, not in the core. |
+| Measurement uncertainty — propagation | Still deferred, and the reason is unchanged: it is a large topic of its own with its own error propagation, and it belongs on top of the core rather than in it. What has since been decided is only *where* the layer lives — `metrology/uncertainty`, D15 — and *what* it is: interval arithmetic, which gives worst-case bounds and has the dependency problem. Quadrature combination, correlated quantities and coverage factors are none of it and stay here. |
 | Non-linear scales | dB, pH, degrees Baumé. They do not fit the factor/offset model of D4 and need their own abstraction. |
 | Localised output | Decimal comma, unit names per language. Maintainable only once the catalogue is settled. |
 | Vector and tensor quantities | A different subject. A library for scalar quantities stays one. |

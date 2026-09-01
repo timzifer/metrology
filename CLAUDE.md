@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D14 and referenced
+more importantly, the reasoning — decisions are numbered D1 … D15 and referenced
 from code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
 `CONCEPT.md` and the code is the failure mode to avoid.
@@ -21,6 +21,13 @@ statically per D13. What remains before `v1.0.0` is the deliberate API review of
 section 7 of `CONCEPT.md`; until then the module is `v0.x` and the API may
 change. Section 7 also records what is complete and what each subsystem is
 measured by.
+
+One thing is **decided and not built**: `metrology/uncertainty`, the interval
+layer of D15 — a magnitude known only to lie between two bounds. Read D15 before
+touching it, in particular the rule that an interval bound rounds *outward* and
+the additive `Engine.Rounding` that requires. Uncertainty *propagation* —
+quadrature, correlations, coverage factors — stays deferred in section 8 and is
+not what D15 describes.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
