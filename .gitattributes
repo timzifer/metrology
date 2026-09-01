@@ -1,0 +1,14 @@
+# Normalise line endings: LF in the repository and in the working tree.
+# Without this, files written from a Linux toolchain and files checked out by
+# Windows git with autocrlf=true show up as wholly modified against each other.
+* text=auto eol=lf
+
+*.go   text eol=lf
+*.mod  text eol=lf
+*.sum  text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Generated catalogue code: keep diffs collapsed in reviews.
+*_gen.go linguist-generated=true

@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build · vet · test · coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          check-latest: true
+
+      - name: Verify formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector
+        run: go test -race ./...
+
+      # Separate run: -race and -covermode=atomic together are slow and the
+      # coverage numbers do not depend on the race detector.
+      - name: Coverage profile
+        run: go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+
+      - name: Coverage gate (D14)
+        run: go run ./tools/covercheck -profile coverage.out
+
+      - name: Per-function coverage
+        if: always()
+        run: go tool cover -func=coverage.out
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-profile
+          path: coverage.out
+          if-no-files-found: ignore
+
+  generate:
+    name: generated code is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          check-latest: true
+
+      # From M3 onward the catalogue is generated (D8). Until then this is a
+      # no-op that still proves the check works.
+      - name: Regenerate
+        run: go generate ./...
+
+      - name: Fail if regeneration changed anything
+        run: |
+          if ! git diff --exit-code; then
+            echo
+            echo "Generated code is out of date. Run 'go generate ./...' and commit the result."
+            exit 1
+          fi
