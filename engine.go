@@ -8,7 +8,7 @@ import "github.com/cockroachdb/apd/v3"
 // Twenty digits is not a compromise between speed and accuracy, it is the point
 // past which accuracy stops arriving: the physical constants a conversion chain
 // is built from are known to far fewer digits, and no measurement carries more.
-// See O2 in CONCEPT.md for the measurement behind the number.
+// See D9 in CONCEPT.md for the measurement behind the number.
 const DefaultPrecision = 20
 
 // Engine holds the precision a computation is carried out with (D9).

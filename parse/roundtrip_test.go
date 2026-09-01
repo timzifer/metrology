@@ -12,9 +12,9 @@ import (
 // on an affine scale, zero, and more digits than a float64 holds.
 var magnitudes = []string{"2.5", "-40", "0", "1", "1234567890.123456789012345678901"}
 
-// TestRoundTrip is the property M5 is measured by: everything the library
-// prints, the library reads back — as the same unit, the same kind and the same
-// digits, across the whole catalogue.
+// TestRoundTrip is the property the text form of D12 is measured by: everything
+// the library prints, the library reads back — as the same unit, the same kind
+// and the same digits, across the whole catalogue.
 //
 // The kind is the one thing the text does not carry ("K" is a temperature and a
 // temperature difference), so the parser is asked for the reading the unit was

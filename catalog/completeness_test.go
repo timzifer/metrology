@@ -7,9 +7,9 @@ import (
 	"github.com/timzifer/metrology/catalog"
 )
 
-// M4 is done when all seven SI base units and all twenty-two named derived
-// units are in the catalogue. This is that list, taken from the SI Brochure,
-// and it is a list rather than a count so that a missing unit says which one.
+// The catalogue holds all seven SI base units and all twenty-two named derived
+// units. This is that list, taken from the SI Brochure, and it is a list rather
+// than a count so that a missing unit says which one.
 func TestSIIsComplete(t *testing.T) {
 	t.Run("the seven base units", func(t *testing.T) {
 		for _, tc := range []struct {

@@ -8,7 +8,7 @@ import (
 
 // validate checks the catalogue before a line of Go is written.
 //
-// M3 requires these checks to happen at generation time and to abort, rather
+// D8 requires these checks to happen at generation time and to abort, rather
 // than to panic at runtime the way a registry does: a catalogue defect is a
 // broken build, not a broken program in somebody else's production (D7).
 func validate(c *catalogue) error {

@@ -74,8 +74,8 @@ func TestGeneratedFilesAreMarked(t *testing.T) {
 	}
 }
 
-// M3: the generator aborts on a defective catalogue instead of producing code
-// that panics at run time in somebody else's program.
+// The generator aborts on a defective catalogue instead of producing code that
+// panics at run time in somebody else's program (D8).
 func TestValidationRejects(t *testing.T) {
 	for _, tc := range []struct {
 		name string

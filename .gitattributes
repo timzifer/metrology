@@ -12,3 +12,6 @@
 
 # Generated catalogue code: keep diffs collapsed in reviews.
 *_gen.go linguist-generated=true
+
+# Binary assets: never line-ending-converted, never diffed as text.
+*.png binary

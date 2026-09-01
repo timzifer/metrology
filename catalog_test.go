@@ -6,12 +6,13 @@ import (
 	"github.com/timzifer/metrology/symbol"
 )
 
-// The mini catalogue of M2: enough units to exercise every rule, and no more.
+// The mini catalogue: enough units to exercise every rule of the core, and no
+// more.
 //
-// It lives in the test binary on purpose. The real catalogue is generated from
-// YAML (D8) and arrives with M3; a hand-maintained one in the library would be
-// a second source of truth for exactly as long as it takes someone to forget
-// it exists.
+// It lives in the test binary on purpose. The shipped catalogue is generated
+// from YAML (D8), and the core is tested against units the test defines rather
+// than against it: a test that uses the catalogue to test the engine fails twice
+// for one defect and tells you neither time which one it was.
 var (
 	// Length: a base unit, a scaled one, and a squared one for products.
 	Metre     = metrology.MustUnit(metrology.UnitDef{Dimension: dimension.L, Symbol: symbol.SI("m")})

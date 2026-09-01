@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// D14 excludes generated files from both numerator and denominator, and M3 asks
-// for that to be demonstrated rather than assumed: the catalogue is generated
-// (D8), so from here on most of the line count in the repository is code nobody
-// wrote and no test should be written for.
+// D14 excludes generated files from both numerator and denominator, and that is
+// demonstrated rather than assumed: the catalogue is generated (D8), so most of
+// the line count in the repository is code nobody wrote and no test should be
+// written for.
 func TestGeneratedFilesAreExcluded(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
