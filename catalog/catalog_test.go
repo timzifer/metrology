@@ -74,9 +74,11 @@ func TestQuantitiesSharingADimension(t *testing.T) {
 		t.Fatal("the hertz and the becquerel no longer share a dimension")
 	}
 
+	//unitvet:ignore the assertion is that this conversion fails
 	if _, err := frequency.Hertz.Of(50).To(activity.Becquerel); !errors.Is(err, metrology.ErrQuantity) {
 		t.Errorf("50 Hz converted to becquerel: %v", err)
 	}
+	//unitvet:ignore the assertion is that this addition fails
 	if _, err := absorbeddose.Gray.Of(1).Add(dose.Sievert.Of(1)); !errors.Is(err, metrology.ErrQuantity) {
 		t.Errorf("a gray was added to a sievert: %v", err)
 	}

@@ -8,11 +8,12 @@ dimensional analysis, and one package per quantity so that autocompletion double
 as a catalogue.
 
 > **Status: under construction.** The architecture is settled and written down in
-> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M5. The code below
-> runs, the catalogue holds the SI — seven base units, twenty-two named derived
-> units, and the non-SI units of NIST SP 811 that process engineering uses — and
-> the text form reads and writes. Still missing: `unitvet`, the static dimension
-> checker. The API will change without notice until `v1.0.0`.
+> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M6, the last one
+> before the API review. The code below runs, the catalogue holds the SI — seven
+> base units, twenty-two named derived units, and the non-SI units of NIST SP 811
+> that process engineering uses — the text form reads and writes, and `unitvet`
+> checks dimensions statically. The API will change without notice until
+> `v1.0.0`.
 
 ```go
 p := pressure.Bar.Of(2.5)
@@ -50,10 +51,11 @@ analysis in its type system — there are no integer type parameters, so a
 library checks at runtime and makes the error message carry its weight, naming
 both dimensions.
 
-**A `go vet` pass catches what is statically provable.** `unitvet` parses your
-code and reports additions across incompatible dimensions without running it. It
-reports only what it can prove and stays silent otherwise, so it composes with
-existing CI instead of producing noise. Planned for M6.
+**A `go vet` pass catches what is statically provable.** `unitvet` reads your
+code and reports arithmetic and conversions across incompatible dimensions
+without running it. It reports only what it can prove and stays silent
+otherwise, so it composes with existing CI instead of producing noise. See
+[below](#dimensions-are-checked-before-the-code-runs).
 
 ## The catalogue is data
 
@@ -131,6 +133,42 @@ Everything the library prints, it reads back — as the same unit, the same kind
 and the same digits, across the whole catalogue. The parser is fuzzed against
 that property.
 
+## Dimensions are checked before the code runs
+
+Go cannot express dimensional analysis in its type system, so this library
+checks at run time — and ships a `go vet` pass that recovers the part of it a
+compiler could have caught:
+
+```sh
+go install github.com/timzifer/metrology/cmd/unitvet@latest
+go vet -vettool=$(go env GOPATH)/bin/unitvet ./...
+```
+
+```
+app/app.go:12:33: Add on incompatible dimensions: L⁻¹M¹T⁻² and Θ¹
+app/app.go:19:14: Add on incompatible kinds: absolute and absolute; the sum of two points on a scale is not a point on it
+app/app.go:26:21: To on incompatible quantities: frequency and radioactivity
+```
+
+It resolves a unit through local variables, through the arithmetic that composes
+units, and across package boundaries — a function that always returns the same
+scale says so in a fact its callers read. Where it cannot resolve one, it says
+nothing at all: a unit chosen in an `if`, one arriving as a parameter, one read
+out of a map, or one from a catalogue of your own it has never seen. A dimension
+checker with false positives is a dimension checker that gets switched off, and
+then it catches nothing.
+
+For the test that asserts an operation fails, a comment silences the report:
+
+```go
+//unitvet:ignore the assertion is that this conversion fails
+_, err := frequency.Hertz.Of(50).To(activity.Becquerel)
+```
+
+The table of units the pass resolves against is generated from the same
+`catalog.yaml` as the library, so the checker and the run time cannot drift
+apart.
+
 ## Requirements
 
 Go 1.27 or newer. The library uses generic methods, which are only available from
@@ -153,6 +191,9 @@ go test -race ./...
 
 go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 go run ./tools/covercheck -profile coverage.out
+
+go build -o /tmp/unitvet ./cmd/unitvet
+go vet -vettool=/tmp/unitvet ./...
 ```
 
 The project targets 100 % statement coverage of hand-written code, enforced in

@@ -199,6 +199,27 @@ func TestModuleFromGoMod(t *testing.T) {
 	}
 }
 
+// A block with no statements is neither covered nor uncovered. An empty method
+// body — the AFact of an analysis fact, for instance — produces one, and
+// listing it as uncovered names a file that has nothing wrong with it.
+func TestEmptyBlocksAreNeitherCoveredNorUncovered(t *testing.T) {
+	total, covered, uncovered := summarise([]block{
+		{file: "unitvet/unitvet.go", startLine: 112, statements: 0, count: 0},
+		{file: "unitvet/unitvet.go", startLine: 114, statements: 1, count: 3},
+		{file: "unitvet/check.go", startLine: 20, statements: 2, count: 0},
+	})
+
+	if total != 3 || covered != 1 {
+		t.Errorf("counted %d of %d statements, want 1 of 3", covered, total)
+	}
+	if _, listed := uncovered["unitvet/unitvet.go"]; listed {
+		t.Error("a file whose only uncovered block is empty was reported")
+	}
+	if got := len(uncovered["unitvet/check.go"]); got != 1 {
+		t.Errorf("the genuinely uncovered block was reported %d times, want 1", got)
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

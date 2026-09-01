@@ -12,17 +12,20 @@ A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
-**Current milestone: M5 → M6.** The core is implemented, the catalogue holds the
+**Current milestone: M6 done.** The core is implemented, the catalogue holds the
 SI — all seven base units, all twenty-two named derived units, and the non-SI
-units of NIST SP 811 that process engineering uses — and the text form of D12
-reads and writes: `metrology` writes, `parse` reads. M6 is `unitvet`, the static
-dimension checker of D13. The status notes under M1 … M5 in `CONCEPT.md` record
-what each implementation decided. See section 7 of `CONCEPT.md` for the sequence
-and the definition of done for each step.
+units of NIST SP 811 that process engineering uses — the text form of D12 reads
+and writes (`metrology` writes, `parse` reads), and `unitvet` checks dimensions
+statically per D13. What remains before `v1.0.0` is the deliberate API review of
+section 7. The status notes under M1 … M6 in `CONCEPT.md` record what each
+implementation decided.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
-`source:`; the generator rejects one without.
+`source:`; the generator rejects one without. One `catgen` run writes the
+quantity packages, `catalog/units_gen.go` **and** `unitvet/table_gen.go`: the
+checker resolves units against the catalogue it was generated from, and that is
+the only reason it cannot drift out of step with the run time.
 
 ## Invariants — breaking one of these is a defect, not a style question
 
@@ -96,9 +99,15 @@ go test -race ./...
 go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 go run ./tools/covercheck -profile coverage.out
 
-# once the checker exists (M6)
-go vet -vettool=$(go env GOPATH)/bin/unitvet ./...
+# the dimension checker over this repository (D13); it must stay silent
+go build -o /tmp/unitvet ./cmd/unitvet
+go vet -vettool=/tmp/unitvet ./...
 ```
+
+The `unitvet` corpus under `unitvet/testdata` is a module of its own with a
+`replace` back to the root — that is what lets it import the real quantity
+packages. `go build ./...` at the root does not reach it; build it from its own
+directory when changing it.
 
 ## Coverage policy (D14)
 
@@ -142,4 +151,10 @@ error branch that cannot fire usually means the error cannot occur.
   physical measurements.
 - `unitvet` stays silent on cases it cannot prove (D13). That is the design: a
   dimension checker with false positives gets switched off and then catches
-  nothing at all. Do not make it "smarter" by guessing.
+  nothing at all. Do not make it "smarter" by guessing. In particular it trusts
+  a package-level unit variable only where the generated table names it, and it
+  does not resolve `MustUnit` calls, phi nodes, parameters or container reads.
+- A test in this repository that asserts an operation fails is an operation
+  `unitvet` is right to report. Mark it `//unitvet:ignore <reason>` — do not
+  weaken the test to hide it from the checker, and do not add a rule exempting
+  test files, which would blind the checker to every real defect in one.

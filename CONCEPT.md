@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Status** | M5 implemented — the text form reads and writes, and round-trips across the catalogue |
+| **Status** | M6 implemented — the static dimension checker ships, and runs clean over the library itself |
 | **Date** | 2026-09-01 |
 | **Module** | `github.com/timzifer/metrology` |
 | **Go** | 1.27 (minimum) |
@@ -399,7 +399,7 @@ computed magnitude is too (D6), so it converts into any unit of its dimension.
 
 ### D13 — A `go vet` pass that checks dimensions statically
 
-**Status:** decided, prototype demonstrated
+**Status:** decided, implemented (M6)
 
 The library ships `cmd/unitvet`, a `golang.org/x/tools/go/analysis` pass that
 parses third-party Go code, resolves which unit each `Measurement` carries, and
@@ -407,12 +407,17 @@ reports additions, subtractions and conversions across incompatible dimensions �
 without running the code.
 
 ```
-go vet -vettool=$(which unitvet) ./...
+go vet -vettool=$(go env GOPATH)/bin/unitvet ./...
 
-app/app.go:12:33:            Add on incompatible dimensions: L-1M1T-2 and Th1
-app/app.go:19:14:            Sub on incompatible dimensions: L-1M1T-2 and Th1
-consumer/consumer.go:10:34:  Add on incompatible dimensions: L-1M1T-2 and L1
+app/app.go:12:33:            Add on incompatible dimensions: L⁻¹M¹T⁻² and Θ¹
+app/app.go:19:14:            Sub on incompatible dimensions: L⁻¹M¹T⁻² and Θ¹
+consumer/consumer.go:10:34:  Add on incompatible dimensions: L⁻¹M¹T⁻² and L¹
 ```
+
+The dimensions are written the way D11 requires of the run-time errors, because
+the two messages are read by the same person about the same mistake, and a
+checker with a notation of its own would make them compare two spellings
+instead of two dimensions.
 
 **How it works.** The pass consumes SSA from `buildssa` and walks each `Add` /
 `Sub` call's operands backwards to their origin. When an operand traces to a
@@ -430,20 +435,27 @@ nothing. A dimension checker that produces false positives is a dimension checke
 that gets switched off, and then it catches nothing at all. False negatives are
 acceptable; the runtime check of D1 remains the backstop.
 
-**What is decidable, measured on the prototype:**
+**What is decidable.** Every row is a function in `unitvet/testdata`, and both
+columns are asserted:
 
 | Pattern | Result |
 |---|---|
 | `pressure.Bar.Of(2.5).Add(temperature.Celsius.Of(20))` | reported |
 | assignment to local variables, then `p.Sub(t)` | reported |
+| `temperature.Celsius.Of(20).Add(temperature.Celsius.Of(5))` | reported — the affine rule of D6 |
+| `frequency.Hertz.Of(50).To(activity.Becquerel)` | reported — the quantity tag of D6 |
+| a unit computed with `Div`, `Per` or `Pow`, then used | reported — the walk follows the composition |
 | operand from another package's function with an invariant unit | reported, via facts |
 | same dimension, different units (`bar` + `Pa`) | correctly silent |
 | unit chosen at runtime (`if x { u = Bar }`) | silent — SSA φ-node, not provable |
 | operand arriving as a function parameter | silent — unknown origin |
+| a unit from the caller's own catalogue | silent — not in the generated table |
+| a unit held in a map, a slice or a struct field | silent |
+| `25 °C − 20 °C`, then the result used | silent — see the M6 status note |
+| a method value, `add := m.Add` | silent — the receiver is bound out of sight |
 
-Units held in slices, maps or struct fields, or arriving from deserialisation,
-are equally out of reach. This is a lint that catches the statically obvious
-subset, not a proof system.
+Units arriving from deserialisation are equally out of reach. This is a lint
+that catches the statically obvious subset, not a proof system.
 
 **Why it earns its place.** D1 established that Go cannot express dimensional
 analysis in its type system. D13 recovers a useful part of what const generics
@@ -452,10 +464,24 @@ of check, and without asking users to change how they write code. It is opt-in,
 it composes with existing `go vet` and CI setups, and third parties can run it
 against their own code without depending on it.
 
-**Scope beyond Add/Sub.** The same machinery checks `ConvertTo` targets, and — in
-the API of section 4, where `Div` takes an explicit result unit — whether that
-declared result unit matches the computed dimension. Those are the same walk with
-a different comparison.
+**Scope beyond Add/Sub.** The same machinery checks the target of a conversion —
+`To`, `In` and `DecimalIn` — and `Cmp`, and the affine and quantity rules of D6
+wherever they are decidable: two points added, a point multiplied, a hertz
+converted into a becquerel. Those are the same walk with a different comparison,
+and leaving them out would have meant a checker that proves the coarse half of
+what it has the information for. What is *not* checked is a declared result unit
+for `Div`: the API of section 4 sketched one, and M2 did not build it — the
+quotient carries the unit its operands gave it and is named in a separate,
+checked step.
+
+**Silencing a report.** A test that asserts an operation fails is an operation
+the pass is right to report and nobody wants reported — the catalogue tests
+contain two. A `//unitvet:ignore <reason>` line comment silences the diagnostic
+on its own line and on the line below it, spelled to match the
+`//coverage:ignore` markers of D14 rather than inventing a second convention.
+The pass does not read the reason; the next reader does. This is the one escape
+hatch, and it is deliberately a source-level one: a flag that switched a rule
+off globally would hide the next real defect along with the deliberate one.
 
 ### D14 — 100 % statement coverage of hand-written code, enforced
 
@@ -586,7 +612,7 @@ the powers of ten where the prefix changes.
 | `internal/decimaltext` | the shape of a decimal, for the core and the parser | done (M5) |
 | `parse` | reading the text form, resolving unit expressions | done (M5) |
 | `catalog` | YAML source plus generator | M3 |
-| `unitvet`, `cmd/unitvet` | static dimension checker per D13 | M6 |
+| `unitvet`, `cmd/unitvet` | static dimension checker per D13 | done (M6) |
 | `imperial` | customary units, planned; shape per O1 | after M4 |
 | `length`, `pressure`, … | one package per quantity, fully generated | M3 onward |
 | `internal/testutil` | property tests, aliasing guard, catalogue checks | M2 |
@@ -936,6 +962,55 @@ assertable.
 - and reports nothing on the not-provable cases
 - the dimension table is generated, never hand-maintained
 - running the pass over the library's own examples and tests is clean
+
+**Status: done.** All four conditions hold: the corpus under `unitvet/testdata`
+holds thirty-odd seeded conflicts and as many cases that must stay silent, both
+asserted by `analysistest`; `unitvet/table_gen.go` comes out of the same
+`catgen` run as the catalogue; and CI runs the built tool over the whole
+repository, tests and examples included. What the implementation decided,
+beyond what was written above:
+
+- **The pass checks kinds and quantities, not only dimensions.** The two extra
+  comparisons are the same walk over the same resolved operands, and leaving
+  them out would have shipped a checker that had the information to prove
+  `20 °C + 5 °C` wrong and declined to say so. Every rule the pass applies is
+  one the run time applies, in the order the run time applies it, so a
+  diagnostic and the error it predicts never disagree.
+- **A unit is trusted only where the catalogue names it.** The resolver reads a
+  package-level variable when — and only when — the generated table has it,
+  which is what keeps the pass from assuming that a variable it does not know
+  is never written to. A program with a catalogue of its own is therefore
+  silent rather than wrong, and silent is the failure this design accepts.
+- **A forbidden operation has no result.** `Add` on two absolute magnitudes
+  returns the zero Measurement, so the walk stops there rather than propagating
+  the scale it would have had. One mistake reports once; without this a single
+  wrong line reports again at every operation downstream of it, which is how a
+  linter teaches people to ignore it.
+- **The difference of two points is not resolved.** `25 °C − 20 °C` is read on
+  the interval unit the scale declares — K for °C — and which unit that is is
+  not something the table records. The dimension is settled and the tag is not,
+  so the pass says nothing about the result rather than guessing a tag for it.
+  Recording the declared interval unit in the table would close this, and it is
+  a table entry, not a redesign.
+- **A method call is one whose callee still has its receiver.** A method value
+  binds the receiver into a closure and calls a wrapper without it, and the
+  wrapper carries the original method's own object — so reading the operands
+  off such a call by position reads the wrong ones. The wrapper is refused
+  rather than unpacked: a receiver bound out of sight is not provable anyway.
+- **Generic instantiations are normalised through `Origin`,** which is the
+  finding already recorded in the verification log below, now load-bearing:
+  `Bar.Of(2.5)` reaches the pass as a call to `Of[float64]`, and a rule keyed
+  on the name `Of` would match nothing at all.
+- **The corpus is a module of its own** under `unitvet/testdata`, with a
+  `replace` back to the repository root, because `analysistest` runs a
+  directory holding a `go.mod` in module mode. That is what lets the corpus
+  import the real quantity packages: a checker tested against a stand-in
+  written next to it would prove only that the stand-in matches the table.
+  CI builds that module before the tests, because `analysistest` loads it with
+  `GOPROXY=off` and a cold module cache would otherwise fail the run.
+- **`covercheck` no longer lists blocks with no statements.** `AFact` is an
+  empty method body, which is a coverage block that can be neither covered nor
+  uncovered; reporting it named a file with nothing wrong in it.
 
 Tagging starts at M2 as `v0.x`. `v1.0.0` comes only after M5 and after a
 deliberate API review — any stability promise made before that is one to regret

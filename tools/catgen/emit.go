@@ -174,3 +174,54 @@ func unique(values []string) []string {
 	}
 	return out
 }
+
+// emitVetTable writes the dimension table the static checker of D13 resolves
+// catalogue units against.
+//
+// It is generated from the same YAML as the library itself, which is the whole
+// point: a checker with its own copy of the units would disagree with the
+// runtime the first time a factor changed, and disagree silently. The table
+// keys a unit variable by the name the checker sees in the SSA — the import
+// path of its package and the identifier — and carries only what the checker
+// compares: dimension, kind and quantity tag.
+//
+// Like the catalogue index it is data only. There is no generated branch in
+// here for anyone to write a test for; the walk that reads it is hand-written
+// in unitvet, where the coverage gate of D14 sees it.
+func emitVetTable(module string, c *catalogue) ([]byte, error) {
+	var b bytes.Buffer
+
+	fmt.Fprintln(&b, header)
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "package unitvet")
+	fmt.Fprintln(&b)
+
+	// The metrology import is named only by the kind of an absolute unit, so a
+	// catalogue without one must not declare it: gofmt keeps an unused import,
+	// and the generated file would not compile.
+	imports := []string{fmt.Sprintf("%q", module+"/dimension")}
+	for _, u := range c.units() {
+		if u.isAbsolute() {
+			imports = append(imports, fmt.Sprintf("%q", module))
+			break
+		}
+	}
+	fmt.Fprintf(&b, "import (\n%s\n)\n\n", strings.Join(unique(imports), "\n"))
+
+	fmt.Fprintln(&b, "// catalogue is every unit the library ships, keyed by the qualified name of")
+	fmt.Fprintln(&b, "// the package-level variable holding it.")
+	fmt.Fprintln(&b, "var catalogue = map[string]scale{")
+	for _, u := range c.units() {
+		fmt.Fprintf(&b, "%q: {dim: %s", module+"/"+u.quantity.Package+"."+u.Go, u.quantity.Dimension.dimensionExpr())
+		if u.isAbsolute() {
+			fmt.Fprintf(&b, ", kind: %s", u.kindExpr())
+		}
+		if u.quantityTag() != "" {
+			fmt.Fprintf(&b, ", quantity: %q", u.quantityTag())
+		}
+		fmt.Fprintf(&b, "}, // %s\n", u.ID)
+	}
+	fmt.Fprint(&b, "}\n\n")
+
+	return format.Source(b.Bytes())
+}

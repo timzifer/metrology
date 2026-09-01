@@ -94,5 +94,19 @@ func run(source, root, module string) error {
 		return err
 	}
 	fmt.Printf("catgen: %s (%d units)\n", path, len(c.units()))
+
+	table, err := emitVetTable(module, &c)
+	if err != nil {
+		return fmt.Errorf("unitvet table: %w", err)
+	}
+	dir = filepath.Join(root, "unitvet")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path = filepath.Join(dir, "table_gen.go")
+	if err := os.WriteFile(path, table, 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("catgen: %s (%d units)\n", path, len(c.units()))
 	return nil
 }
