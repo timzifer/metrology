@@ -12,12 +12,17 @@ A Go library for physical quantities: exact decimal arithmetic, runtime
 dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
-**Current milestone: M2 → M3.** `dimension`, `symbol` and the core —
-`Measurement`, `Unit`, arithmetic, conversion, errors — are implemented. The
-status notes under M1 and M2 in `CONCEPT.md` record what those implementations
-decided. M3 is the YAML catalogue and its generator; the mini catalogue the core
-is tested against lives in `catalog_test.go` and is not shipped. See section 7 of
-`CONCEPT.md` for the sequence and the definition of done for each step.
+**Current milestone: M3 → M4.** The core is implemented and the catalogue is
+generated: `catalog/catalog.yaml` is the source of truth, `tools/catgen` turns it
+into the quantity packages and `catalog/units_gen.go`. M4 scales that catalogue —
+the electromagnetic, photometric and radiological block of SI, plus golden tests
+against NIST SP 811. The status notes under M1, M2 and M3 in `CONCEPT.md` record
+what each implementation decided. See section 7 of `CONCEPT.md` for the sequence
+and the definition of done for each step.
+
+Adding a unit means editing `catalog/catalog.yaml` and running
+`go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
+`source:`; the generator rejects one without.
 
 ## Invariants — breaking one of these is a defect, not a style question
 

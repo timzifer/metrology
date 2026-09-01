@@ -8,10 +8,10 @@ dimensional analysis, and one package per quantity so that autocompletion double
 as a catalogue.
 
 > **Status: under construction.** The architecture is settled and written down in
-> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M1 — the
-> `dimension` and `symbol` packages exist, the core of the example below does
-> not. Nothing here is importable yet, and the API will change without notice
-> until `v1.0.0`.
+> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M3. The code below
+> runs — the core, the generator and a starter catalogue exist — but the
+> catalogue covers a dozen units rather than the SI, and the API will change
+> without notice until `v1.0.0`.
 
 ```go
 p := pressure.Bar.Of(2.5)
@@ -46,6 +46,37 @@ both dimensions.
 code and reports additions across incompatible dimensions without running it. It
 reports only what it can prove and stays silent otherwise, so it composes with
 existing CI instead of producing noise. Planned for M6.
+
+## The catalogue is data
+
+Units are not written in Go. [`catalog/catalog.yaml`](catalog/catalog.yaml) is
+the source of truth, and `go generate ./...` turns it into the quantity packages
+and the catalogue index:
+
+```yaml
+- id: torr
+  go: Torr
+  doc: one 760th of the standard atmosphere
+  symbol: {form: static, text: Torr}
+  factor: {num: "101325", den: "760"}
+  source: NIST SP 811 (2008), Appendix B.8
+```
+
+Every entry carries a source, because a conversion factor is a claim about the
+world and a claim without a citation cannot be checked. The generator refuses a
+catalogue with a missing source, a duplicate symbol, two units claiming the same
+dimension, or a factor that is not a number — at generation time, so a defective
+catalogue is a failed build rather than a panic in production.
+
+For the cases where the unit is not known at compile time — a symbol read from a
+configuration file, or a computed dimension that needs a unit to be expressed
+in — the `catalog` package indexes the same data:
+
+```go
+q, _ := force.Newton.Of(100).Div(area.SquareMetre.Of(2))  // 50 N/m²
+unit, _ := catalog.Canonical(q.Dimension(), q.Kind())     // Pa
+named, _ := q.To(unit)                                    // 50 Pa
+```
 
 ## Requirements
 

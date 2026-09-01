@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Status** | M2 implemented — the core computes; the catalogue is next |
+| **Status** | M3 implemented — the catalogue is data and the Go code is generated |
 | **Date** | 2026-09-01 |
 | **Module** | `github.com/timzifer/metrology` |
 | **Go** | 1.27 (minimum) |
@@ -691,6 +691,55 @@ aborts, rather than panicking at runtime.
 **Done when:** `go generate ./...` reproducibly emits identical code, CI verifies
 that nothing ungenerated was committed, and the coverage filter demonstrably
 excludes the generated files.
+
+**Status: done.** What the implementation decided:
+
+- **The generator lives in `tools/catgen`, the catalogue in `catalog/`.** The
+  YAML and the generated index sit together; the generator sits where D14
+  already excludes it from the coverage figure, and is tested on its own terms.
+- **The generated files are declarations, nothing else.** A quantity package is
+  a list of `var X = metrology.MustUnit(…)`, and the catalogue index is three
+  composite literals. There is no generated logic, so there is no generated
+  branch anyone has to write a test for — and the lookups that do have behaviour
+  are hand-written in `catalog/catalog.go`, where the coverage gate sees them.
+- **Consequence for D14:** the shipped generated files contribute *zero*
+  statements to the coverage profile, so the exclusion currently changes no
+  number. That is not a reason to leave it untested: `covercheck` is tested
+  against a generated fixture that does contain statements, because the day a
+  generated file grows a function is not the day to discover the filter never
+  worked.
+- **Package-level `var`s, not accessor functions.** `pressure.Bar` reads the way
+  the API sketch in section 4 writes it, and a function would rebuild the
+  decimals on every call. This is not the global mutable state D7 rules out:
+  nothing writes to these after init, nothing registers itself, and there is no
+  runtime `Register` to race with. What D7 forbids is state that an import
+  *creates*; a table of constants is not that.
+- **One package per dimension, and the interval units live in `interval`.**
+  `temperature` holds the absolute scales — °C, K, °F — and `interval` the spans
+  they subtract into. `temperature.Celsius.Of(20).Add(interval.Kelvin.Of(5))`
+  reads as what it is, and the split keeps a package from meaning two things.
+- **Every unit carries a source, and the generator refuses one that does not.**
+  A conversion factor is a claim about the world; a claim without a citation
+  cannot be checked, which is the whole argument of D4.
+- **The generator validates before it writes.** Duplicate ids, duplicate Go
+  identifiers, duplicate symbols within a kind, two units claiming to be
+  canonical for one dimension and kind, a dimension with no canonical unit at
+  all, a factor that is not a number or is zero, an offset on an interval unit,
+  an interval reference that is missing, absolute, or of another dimension, and
+  a package declaring two dimensions. All of them abort, and a rejected
+  catalogue writes no file — the failure is a broken build, never a panic in
+  somebody else's program (D7).
+- **Unknown YAML keys are an error.** A misspelled `factorr:` would silently
+  produce a unit with a factor of one, which is the one defect a catalogue must
+  not be able to have.
+- **The output is ordered, not iterated.** Units are emitted sorted by id and
+  imports are deduplicated and sorted, so two runs are byte-identical. CI checks
+  exactly that by looking for a dirty working tree after `go generate ./...`; a
+  map range anywhere in the emitter would turn that check into a coin toss.
+- **The mini catalogue of M2 stays in `catalog_test.go`.** The core is tested
+  against units defined by the test, not against the shipped catalogue: a test
+  that uses the catalogue to test the engine fails twice for one defect and
+  tells you neither time which one it was.
 
 ### M4 — Scaling the catalogue
 
