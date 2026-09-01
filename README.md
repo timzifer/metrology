@@ -174,6 +174,64 @@ The table of units the pass resolves against is generated from the same
 `catalog.yaml` as the library, so the checker and the run time cannot drift
 apart.
 
+## What exact arithmetic costs
+
+A magnitude is an `apd.Decimal`, and a conversion is an exact multiplication
+followed by one rounded division (D4). That costs a few hundred nanoseconds and
+at least one allocation, where the same arithmetic in `float64` costs a fraction
+of one nanosecond and none. Three orders of magnitude, and no amount of tuning
+closes the gap — it is what exactness is made of.
+
+So the question is not whether to pay it but where. Put the boundary in one
+place and cross it twice:
+
+```
+float64 · string · SQL column · sensor word
+        │
+        │  Unit.Of, Unit.OfString, parse.Measurement, parse.Text
+        ▼
+   Measurement — exact decimal, dimension, kind, quantity
+        │
+        │  conversion · arithmetic · comparison · unit algebra
+        ▼
+   Measurement
+        │
+        │  Measurement.In[float64], String, Prefixed, MarshalJSON, Value
+        ▼
+float64 · text · SQL value · report
+```
+
+Everything between the two crossings is exact and checked. Everything outside is
+as fast as it ever was. The library is built for the values where that trade is
+obviously right: setpoints, limits, calibration factors, what a report prints and
+what a database stores — values that cross the boundary once and are then
+converted, compared and written a handful of times.
+
+**Stay in `float64` where the answer is a float anyway.** A filter over a million
+samples a second, an FFT, a PID loop, a plot: convert the scaling *once* into a
+`Measurement`, take `In[float64]` *once*, and run the loop on the result. Sensor
+readings that no one will audit individually do not each need an exact decimal —
+what needs one is the limit they are compared against.
+
+**What is cheap enough to ignore.** `Unit` values are immutable and free to
+share. A derived unit built with `Times`, `Per` or `Pow` is built once, not per
+value. `parse.Default()` is a parser built once for the whole catalogue — calling
+`parse.New` per message re-indexes every spelling and costs an order of magnitude
+more than the parse itself, which is the one performance mistake this API makes
+easy to make.
+
+The numbers are not asserted here, because they belong to your machine:
+
+```sh
+go test -run '^$' -bench . -benchmem ./...
+```
+
+`bench_test.go` and `parse/bench_test.go` cover conversion, arithmetic, both
+crossings, the text form and reading. [D9 in
+CONCEPT.md](CONCEPT.md#d9--precision-belongs-to-the-computation-not-the-value)
+has the cost per precision, and why the default is 20 digits rather than
+decimal128.
+
 ## Requirements
 
 Go 1.27 or newer. The library uses generic methods, which are only available from
@@ -212,6 +270,8 @@ go run ./tools/covercheck -profile coverage.out
 
 go build -o /tmp/unitvet ./cmd/unitvet
 go vet -vettool=/tmp/unitvet ./...
+
+go test -run '^$' -bench . -benchmem ./...
 ```
 
 Adding a unit means editing `catalog/catalog.yaml` and running `go generate ./...`

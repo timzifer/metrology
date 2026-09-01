@@ -104,7 +104,16 @@ go run ./tools/covercheck -profile coverage.out
 # the dimension checker over this repository (D13); it must stay silent
 go build -o /tmp/unitvet ./cmd/unitvet
 go vet -vettool=/tmp/unitvet ./...
+
+# the benchmarks behind every runtime-cost claim in CONCEPT.md and README.md
+go test -run '^$' -bench . -benchmem ./...
 ```
+
+A benchmark asserts nothing and cannot fail; CI only runs it once per case to
+keep it compiling. If you change a runtime-cost claim in the documentation,
+change the benchmark that produces it in the same pull request — a quoted
+nanosecond figure with no benchmark behind it is the same failure mode as a
+`CONCEPT.md` that has drifted from the code.
 
 The `unitvet` corpus under `unitvet/testdata` is a module of its own with a
 `replace` back to the root — that is what lets it import the real quantity

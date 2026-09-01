@@ -384,9 +384,22 @@ one division:
 | 50 digits | 3089 ns | 15 |
 | `float64` for reference | 0.34 ns | 0 |
 
-Going from 20 to 34 costs twice the time and seven times the allocations without
-benefiting any physical measurement — no sensor in this domain delivers more than
-six to eight trustworthy digits. decimal128 remains one `NewEngine(34)` away.
+The table is produced by `BenchmarkConvert` in `bench_test.go`, so it can be
+rechecked rather than believed:
+
+```sh
+go test -run '^$' -bench BenchmarkConvert -benchmem .
+```
+
+Absolute figures are a property of the machine — a re-run on a shared cloud VM
+gives 385 / 515 / 677 ns for the three precisions and 0.58 ns for `float64` — and
+the ratios move with the machine too. What does not move is the shape: the
+default allocates once per conversion, decimal128 allocates five to seven times,
+50 digits again about twice that, and every step costs time without benefiting
+any physical measurement — no sensor in this domain delivers more than six to
+eight trustworthy digits. That shape is what the decision rests on, and it is why
+the benchmark is in the tree instead of only its output. decimal128 remains one
+`NewEngine(34)` away.
 
 **Multiplication and division round; addition and subtraction do not.** A sum of
 two decimals is exact and stays exact. A chain of exact products doubles its digit
@@ -887,6 +900,30 @@ at minimum:
   the substitute for a compile error
 - whether `parse.Text` is the right shape for the decoding boundary, or whether a
   parser-typed destination generated per catalogue would serve better
+- what `Quantity` promises. It is a `string` (D6), so the tag is open by
+  construction: a caller's catalogue may spell `"frequency"` and mean whatever it
+  likes by it, and nothing links `metrology.Quantity("frequency")` to the
+  catalogue entry of the same name — the tags are YAML data, not exported
+  constants, and ten of the eighty-two units carry one. Three questions have to
+  get one consistent answer before the type is frozen:
+  **Is a quantity part of a unit's identity or an interpretation of it?**
+  `Unit.Equal` compares the tag, arithmetic drops it (D6), and `parse` restores
+  it by looking the expression's scale up in the catalogue. Those are three
+  different answers today, defensible one at a time; the review has to say which
+  one the type means.
+  **Whose namespace is it?** Either the tags this module ships are reserved
+  names with a documented meaning — in which case they belong in generated
+  constants rather than in string literals, and a caller redefining one is doing
+  something the library can name — or they are local to a catalogue, in which
+  case two catalogues in one program may tag the same dimension differently and
+  the compatibility rule of D6 is comparing spellings across namespaces that
+  never agreed to share one.
+  **What does untagged mean at a boundary?** Inside the core it is the wildcard
+  that keeps a computed magnitude nameable, and that is settled. Crossing D12 it
+  is what an expression carries when no catalogue entry spells it: `50 Hz` reads
+  back tagged `frequency`, `50 s⁻¹` reads back untagged, and the two are the same
+  scale. The text form cannot carry a tag of its own (section 8), so the spelling
+  decides — which is a v1 question rather than a later one.
 - `O1` in section 10, which decides whether `imperial` is a subpackage or a module
 
 `cmd/unitvet` is versioned with the library but breaks nothing on its own: it is
@@ -913,7 +950,7 @@ additive, opt-in, and can ship a new version independently.
 | Risk | Mitigation |
 |---|---|
 | The aliasing invariant breaks unnoticed | It is the one rule whose violation causes silent data corruption. Hence the dedicated guard test of D3, using values above 38 digits — below that threshold apd/v3 masks the bug. |
-| Decimal arithmetic is too slow | Measured: 783 ns per conversion at 20 digits, versus 0.34 ns for `float64`. Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings. If it binds, the escape is a fast path for values that fit losslessly in `int64` — not a return to `float64`. |
+| Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it. If it binds, the escape is a fast path for values that fit losslessly in `int64` — not a return to `float64`. |
 | Kind semantics proliferate | Every new kind needs a justification in the catalogue. No dimension collision and no affinity, no kind. |
 | `unitvet` produces a false positive | The one failure mode that kills the tool, because users disable it and then get nothing. Every rule must be provable before it reports; `analysistest` asserts the silent cases as explicitly as the reported ones. Prefer missing a real bug over inventing one. |
 | `unitvet` drifts from the library | Prevented by construction: its dimension table is generated from the catalogue of D8, in the same `go generate` run. A hand-maintained second table would be the defect waiting to happen. |
@@ -994,6 +1031,19 @@ table is reproduced in D9, where it decides the default.
 | 34 digits (decimal128) | 1541 ns | 7 |
 | 50 digits | 3089 ns | 15 |
 | `float64` for reference | 0.34 ns | 0 |
+
+The measurement is code rather than a record of one:
+
+```sh
+go test -run '^$' -bench . -benchmem ./...
+```
+
+`bench_test.go` covers conversion, arithmetic, the `float64` boundary and the
+text form; `parse/bench_test.go` covers reading. They assert nothing — a
+benchmark that fails is not a defect, and the correctness weight stays in the
+property, golden and guard tests of D14 — but they keep every runtime-cost claim
+in this document checkable on the reader's own machine, which is the only sense
+in which a quoted nanosecond figure is evidence at all.
 
 ### SSA and generic methods (D13)
 
