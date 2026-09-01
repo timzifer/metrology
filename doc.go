@@ -1,0 +1,20 @@
+// Package metrology models physical quantities as immutable values with exact
+// decimal arithmetic and runtime dimensional analysis.
+//
+// The core type is [Measurement]: a decimal magnitude paired with a [Unit].
+// Measurements are ordinary Go values — copyable, comparable and free of hidden
+// state. Arithmetic that would violate physics returns an error rather than
+// panicking, and conversions round exactly once, by a documented rule.
+//
+// Units are not constructed by hand. Each quantity lives in its own package, so
+// that autocompletion doubles as a catalogue:
+//
+//	p := pressure.Bar.Of(2.5)
+//	pa, err := p.In[float64](pressure.Pascal)
+//
+// See CONCEPT.md in the repository root for the architecture and the reasoning
+// behind it. Design decisions are referenced throughout the code as D1 … D14.
+//
+// This package is under construction; see the milestones in CONCEPT.md for what
+// exists today.
+package metrology

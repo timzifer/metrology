@@ -1,0 +1,825 @@
+# Metrology — Architecture Concept
+
+> A Go library for physical quantities with exact decimal arithmetic and runtime
+> dimensional analysis, targeting a published module covering SI and process
+> engineering.
+
+| | |
+|---|---|
+| **Status** | M1 implemented — `dimension` and `symbol` are in the tree |
+| **Date** | 2026-09-01 |
+| **Module** | `github.com/timzifer/metrology` |
+| **Go** | 1.27 (minimum) |
+
+---
+
+## Table of contents
+
+1. [Scope](#1-scope)
+2. [Guiding principles](#2-guiding-principles)
+3. [Decisions](#3-decisions)
+4. [API sketch](#4-api-sketch)
+5. [Package layout](#5-package-layout)
+6. [Quantity catalogue](#6-quantity-catalogue)
+7. [Milestones](#7-milestones)
+8. [Deferred](#8-deferred)
+9. [Risks](#9-risks)
+10. [Open questions](#10-open-questions)
+11. [Appendix: verification log](#11-appendix-verification-log)
+
+---
+
+## 1. Scope
+
+The library models a physical quantity as a decimal magnitude, a unit and a
+dimension, and it does so in **concrete value types**: generic methods are
+forbidden in interfaces, and an interface value boxes and allocates for a type
+that may exist in the millions. That single constraint shapes the rest of this
+document.
+
+### Verified against the compiler
+
+Go 1.27.0 built from source. Results:
+
+| Question | Answer |
+|---|---|
+| Generic methods on concrete types | **supported** |
+| Generic methods in interfaces | **forbidden** — `interface method must have no type parameters` |
+| Heterogeneous storage of instantiated generic types | **still impossible** |
+| Integer type parameters for exponents (const generics) | **do not exist** |
+
+The consequence is the premise everything else rests on: **dimensional analysis
+stays a runtime concern.** A `Q[Length, Time]` with exponents checked by the type
+system cannot be built in Go without code generation, and generating over the
+cross-product of all dimensions is not a viable path. The library compensates
+with precise errors instead of compile errors — and makes those errors a
+first-class part of its API.
+
+It also compensates outside the type system: D13 adds a `go vet` pass that proves
+what *can* be proven statically and stays silent about the rest. That recovers a
+useful share of the safety const generics would have given, at the point in the
+toolchain where Go conventionally puts such checks.
+
+### Name and module path
+
+`github.com/timzifer/metrology`. The reasoning, recorded because it will be asked
+again:
+
+- **not `units`** — semantically perfect, practically the worst option. At least
+  six published Go modules already declare `package units` (alecthomas, docker,
+  bcicen, ganehag, woweh, go.pitz.tech). No path conflict, but anyone importing
+  ours alongside any of those needs an alias forever.
+- **not `quantity`** — the closest contender, and the ISO 80000 term for exactly
+  what is modelled. Rejected because *quantity* is already load-bearing vocabulary
+  **inside** the library: the catalogue maps dimension to quantity, D6 speaks of
+  kind-bearing quantities, and the YAML field is called `quantity`. A module of
+  the same name makes the word do duty at two levels and forces every doc sentence
+  to disambiguate.
+- **not `si`** — the catalogue already contains bar, torr, °C and kWh, and the
+  planned sister package is non-SI by definition. A name that misdescribes its
+  own contents from day one.
+- **`metrology`** names the field, not a concept in the model. That leaves
+  *quantity*, *measurement*, *unit*, *dimension* and *kind* free as internal
+  vocabulary — which matters for a library whose entire purpose is precise
+  terminology.
+
+The one honest cost: metrology as a field also covers calibration, traceability
+and uncertainty, and uncertainty is deferred (section 8). The name promises
+slightly more than v1 delivers. `metrology/uncertainty` is the natural home when
+that changes.
+
+No `go-` prefix: that convention marks a Go binding to something else
+(`go-redis`, `go-sql-driver`), and the last path element becomes the default
+package name, which `go-metrology` could not be.
+
+---
+
+## 2. Guiding principles
+
+Every later decision is measured against these seven.
+
+1. **A measurement is a value, not an object.** Copyable, comparable, no
+   identity, no hidden behaviour.
+2. **Nothing is mutated after the fact.** Every operation returns a new value; no
+   existing value is ever written in place.
+3. **Accuracy before speed** — but only in the core. Callers who need `float64`
+   get it at the boundary, not in the middle.
+4. **Conversion factors are exact.** Rounding happens once, at the end, by a
+   documented rule — never in the catalogue.
+5. **No state created by an import.** The catalogue is generated code, not
+   runtime registration.
+6. **Wrong physics is an error value, not a panic.** Panics exist only in
+   explicitly named `Must` variants.
+7. **Every hand-written line is covered.** 100 % statement coverage is the
+   standing target, enforced in CI — see D14 for what that does and does not
+   mean.
+
+---
+
+## 3. Decisions
+
+Each decision states what it costs. Where a decision makes later revision
+expensive, that is noted.
+
+### D1 — Measurement and Unit are concrete value types
+
+**Status:** decided
+
+`Measurement` is a struct of a decimal value and a unit, not an interface. `Unit`
+likewise. There are no `Quantity`, `BaseUnit` or `DerivedUnit` abstractions
+behind them.
+
+**Why.** Two reasons converge. Generic methods are forbidden in interfaces, so
+D10's `Of[N]` and `In[N]` cannot exist on one. And every interface value boxes
+and allocates, which is measurable for a type that may exist in the millions.
+
+**Cost.** Third-party extension happens through data (registering custom units),
+not through implementing types.
+
+### D2 — apd/v3, not v2
+
+**Status:** decided
+
+`github.com/cockroachdb/apd/v3` as the single arithmetic dependency, never v2.
+
+> **Measured, not assumed.**
+> In **apd/v2**, `Decimal.Coeff` is a `math/big.Int`. An ordinary struct copy
+> shares its slice: if either copy is written in place, the other changes
+> silently — *at any digit count*, and passing a struct with an embedded
+> `apd.Decimal` around by value is enough to trigger it. In **apd/v3** an inline
+> optimisation covers values up to 38 digits; beyond that the same behaviour
+> returns — which makes the bug rarer and therefore more treacherous.
+
+**Consequence.** v3 does not solve the problem, it only moves the threshold. What
+actually solves it is D3.
+
+### D3 — Immutability as the load-bearing invariant
+
+**Status:** decided
+
+Every operation allocates its destination `Decimal` fresh. No function ever
+writes into a `Decimal` reachable from an existing `Measurement`.
+`Measurement.Decimal()` returns a copy taken via `Set`, never a pointer into the
+interior.
+
+**Why this suffices.** The aliasing from D2 only becomes dangerous when something
+mutates. If the invariant holds without exception, copies are safe — and the type
+stays a genuine Go value that can be passed freely, used as a map key, and
+compared with `==` for unit equality. The invariant is therefore not a matter of
+style; it is what carries correctness.
+
+**Enforcement.** A test package that runs every public operation on a 200-digit
+value and then asserts that copies taken beforehand are unchanged. Runs in CI
+under `-race`. This is the test that fails first on a regression.
+
+### D4 — Factors as exact fractions
+
+**Status:** decided
+
+A derived unit carries numerator and denominator separately, plus an offset as an
+exact decimal. Conversion to the base unit is `(v + offset) · num / den`,
+performed as an exact multiplication followed by *one* division.
+
+**Why.** The domain's most important factors are not finite in decimal:
+Fahrenheit is 5/9, Torr is 101325/760. Stored as a pre-rounded decimal, every
+conversion rounds twice. Stored as a fraction, it rounds once — and the catalogue
+stays exactly what the SI Brochure says rather than an approximation of it.
+
+**Auditability.** A catalogue entry can be compared to its source character by
+character. `factor: 101325/760` is checkable; `133.32236842105263` is not.
+
+### D5 — Dimension: 7 packed exponents, kind held separately
+
+**Status:** decided
+
+`Dimension` remains a packed integer holding seven `int8` exponents — comparable,
+usable as a map key, allocation-free. `Kind` moves out of that word into its own
+field.
+
+| Bits | Field | Symbol |
+|---:|---|---|
+| 0–7 | time | T |
+| 8–15 | length | L |
+| 16–23 | mass | M |
+| 24–31 | electric current | I |
+| 32–39 | temperature | Θ |
+| 40–47 | amount of substance | N |
+| 48–55 | luminous intensity | J |
+| 56–63 | reserved | — |
+
+**Why separate them.** The current shared word produces two bugs at once.
+`WithoutKind()` clears only four of the eight kind bits because of an operator
+precedence mistake, and `Product()` discards the kind entirely, so every
+multiplication loses the absolute marker. Both disappear by construction once
+kind is no longer a bitfield in the same word — and kind gains room for more than
+eight values, which D6 requires.
+
+### D6 — Kind carries two jobs, with explicit arithmetic rules
+
+**Status:** decided
+
+First, the affine distinction *absolute vs. interval*. Second, resolving
+dimension collisions: torque and energy are both kg·m²·s⁻², gray and sievert both
+m²·s⁻², kinematic viscosity and thermal diffusivity both m²·s⁻¹.
+
+**Rules for addition and subtraction:**
+
+| Operation | Result |
+|---|---|
+| absolute + interval | absolute — `20 °C + 5 K = 25 °C` |
+| absolute − absolute | interval — `25 °C − 20 °C = 5 K` |
+| interval ± interval | interval |
+| absolute + absolute | error |
+| interval − absolute | error |
+
+**Rule for multiplication and division.** The result carries *no* kind. A product
+of a torque quantity and an angle quantity is no longer a torque quantity, and a
+system that tries to guess will guess wrong. Reinterpreting a result as a
+kind-bearing quantity is an explicit, checked conversion: `torque.From(m)`.
+Absolute values may not be multiplied at all — 20 °C times 2 is physically
+meaningless and returns an error.
+
+### D7 — No global state, no init side effects
+
+**Status:** decided
+
+The catalogue is generated Go code: a map from dimension to canonical unit, as a
+package variable, without a mutex and without runtime registration. `Register`,
+`Lookup` and the error classes `SymbolAlreadyRegistered` /
+`QuantityAlreadyRegistered` are removed.
+
+**Why.** Today every import of a quantity package creates global state, and
+`internal.Require` panics when two packages claim the same dimension. For a
+published library this is the worst possible failure mode: it happens at the
+user's site, at process start, depending on import order, and there is nothing
+they can do about it. Generated code does not have this failure class —
+collisions surface at generation time, in-house.
+
+**For user-defined units.** An explicit `Registry` value that the caller
+constructs and passes. A value, not a global.
+
+### D8 — The catalogue is data; the Go code is generated
+
+**Status:** decided
+
+Quantities, units, symbols, factors and source citations live in a versioned YAML
+file. A `go:generate` tool produces the quantity packages, the catalogue map and
+part of the tests.
+
+**Why.** At the target scope in section 6 this is several hundred units. Written
+by hand that is the same line four times per unit, with four chances for a
+transposed digit. As data it is a table that can be checked against the SI
+Brochure and NIST SP 811 — and one that parallelises well with Claude Code,
+because each entry is independent.
+
+**Side benefit.** The file doubles as documentation and can be exported as a
+machine-readable unit catalogue.
+
+### D9 — Precision belongs to the computation, not the value
+
+**Status:** decided
+
+A `Measurement` carries no `apd.Context`. Operations use a package default
+context. Callers needing more construct an explicit `Engine` value.
+
+**Why.** A context carried inside the value forces a rule deciding whose
+precision wins in an addition, and such rules are not predictable for users.
+Precision is a property of the *computation*, not of the measurement; it belongs
+where the computing happens.
+
+**Error handling.** An inexact result is normal and not an error. Overflow,
+division by zero and context violations are errors.
+
+> **Addendum from the prototype.**
+> Every result must be **reduced** before being returned. After a division `apd`
+> pads to the full context precision with zeros: `2.5 bar` otherwise becomes
+> `250000.0000000000000000000000000000 Pa`. Numerically correct, unusable as the
+> exchange format of D12. Without this step four of eight prototype tests failed;
+> with `Reduce` applied to every return value, all pass.
+
+This also settles a related question: the library does **not** track significant
+figures. Whether a value was measured as `2.50` or `2.5` is lost. That is
+deliberate — measurement uncertainty is the topic in section 8, not a by-product
+of number representation.
+
+### D10 — Generic methods at the system boundary
+
+**Status:** decided
+
+The core computes exclusively in `apd.Decimal`. Input and output in arbitrary
+numeric types go through generic methods, which Go 1.27 permits on concrete
+types.
+
+```go
+func (u Unit) Of[N Numeric](v N) Measurement
+func (m Measurement) In[N Numeric](u Unit) (N, error)
+```
+
+`go.mod` must declare `go 1.27` for this — the language version follows from that
+line, not from the installed toolchain. This is also the library's minimum
+version and belongs in the README.
+
+### D11 — Errors are typed and comparable
+
+**Status:** decided
+
+One package for errors, replacing today's split across `errors/` and `internal/`.
+Sentinel values for the class, struct types for the context, everything usable
+with `errors.Is` / `errors.As`.
+
+Because dimensional analysis happens at runtime per D1, the error message is what
+the user gets instead of a compile error. It must name both dimensions in
+readable form — `expected L²M¹T⁻², got L¹M¹T⁻²` — not merely
+`dimensions not equal`.
+
+### D12 — Text is the canonical exchange format
+
+**Status:** decided
+
+`MarshalText` / `UnmarshalText` as the foundation, with `json.Marshaler`,
+`sql.Scanner` and `driver.Valuer` layered on top. A measurement serialises as
+`"2.5 bar"` and round-trips losslessly.
+
+**Why text and not number plus unit.** An object `{"value": 2.5, "unit": "bar"}`
+forces every consumer through `float64` and thereby loses exactly what D2 through
+D4 were built for. The text form preserves the decimal digits. The object form
+stays available as an option but is not the default.
+
+### D13 — A `go vet` pass that checks dimensions statically
+
+**Status:** decided, prototype demonstrated
+
+The library ships `cmd/unitvet`, a `golang.org/x/tools/go/analysis` pass that
+parses third-party Go code, resolves which unit each `Measurement` carries, and
+reports additions, subtractions and conversions across incompatible dimensions —
+without running the code.
+
+```
+go vet -vettool=$(which unitvet) ./...
+
+app/app.go:12:33:            Add on incompatible dimensions: L-1M1T-2 and Th1
+app/app.go:19:14:            Sub on incompatible dimensions: L-1M1T-2 and Th1
+consumer/consumer.go:10:34:  Add on incompatible dimensions: L-1M1T-2 and L1
+```
+
+**How it works.** The pass consumes SSA from `buildssa` and walks each `Add` /
+`Sub` call's operands backwards to their origin. When an operand traces to a
+catalogue unit — `pressure.Bar.Of(2.5)` resolves to the package-level `Bar`
+variable — its dimension is known. The dimension table is generated from the
+same YAML catalogue as the library itself (D8), so the checker and the runtime
+cannot drift apart. Cross-package analysis uses the framework's **fact**
+mechanism: a function that provably always returns one dimension exports that as
+a fact, which importing packages consume — this is how the `consumer.go`
+diagnostic above is produced, from a call into another package.
+
+**The governing rule: silence on doubt.** The pass reports only *provable*
+conflicts. Where an operand's unit cannot be resolved with certainty, it says
+nothing. A dimension checker that produces false positives is a dimension checker
+that gets switched off, and then it catches nothing at all. False negatives are
+acceptable; the runtime check of D1 remains the backstop.
+
+**What is decidable, measured on the prototype:**
+
+| Pattern | Result |
+|---|---|
+| `pressure.Bar.Of(2.5).Add(temperature.Celsius.Of(20))` | reported |
+| assignment to local variables, then `p.Sub(t)` | reported |
+| operand from another package's function with an invariant unit | reported, via facts |
+| same dimension, different units (`bar` + `Pa`) | correctly silent |
+| unit chosen at runtime (`if x { u = Bar }`) | silent — SSA φ-node, not provable |
+| operand arriving as a function parameter | silent — unknown origin |
+
+Units held in slices, maps or struct fields, or arriving from deserialisation,
+are equally out of reach. This is a lint that catches the statically obvious
+subset, not a proof system.
+
+**Why it earns its place.** D1 established that Go cannot express dimensional
+analysis in its type system. D13 recovers a useful part of what const generics
+would have given — at the point in the toolchain where Go actually puts this kind
+of check, and without asking users to change how they write code. It is opt-in,
+it composes with existing `go vet` and CI setups, and third parties can run it
+against their own code without depending on it.
+
+**Scope beyond Add/Sub.** The same machinery checks `ConvertTo` targets, and — in
+the API of section 4, where `Div` takes an explicit result unit — whether that
+declared result unit matches the computed dimension. Those are the same walk with
+a different comparison.
+
+### D14 — 100 % statement coverage of hand-written code, enforced
+
+**Status:** decided
+
+CI fails below 100 % statement coverage. The target applies to hand-written
+packages; generated files are excluded from both numerator and denominator.
+
+**Why this library and not every library.** Three properties make the target
+reachable here rather than aspirational. The core is pure computation with no I/O,
+no clock and no network — every branch is reachable from a table-driven test. The
+catalogue is generated (D8), so the part that would otherwise dominate the line
+count and be tested by copy-paste is excluded by rule. And the failure mode this
+library must avoid is the silent wrong number, which is exactly what an untested
+branch produces.
+
+**What is excluded, and how.**
+
+| Excluded | Mechanism |
+|---|---|
+| Generated catalogue code | files carrying the standard `// Code generated … DO NOT EDIT.` line are filtered out of the coverage profile |
+| Defensive branches that cannot be triggered | require an explicit `//coverage:ignore` comment stating why, and are listed in `COVERAGE_EXCEPTIONS.md` with a rationale |
+| `cmd/` main functions | thin wrappers over `singlechecker.Main`; the pass itself is covered through `analysistest` |
+
+Anything else claiming an exemption is a design smell, not a testing problem. An
+error branch that cannot be reached usually means the error cannot occur and the
+check should go, or that the dependency needs to be injectable so it can be made
+to fail.
+
+**The trap, named explicitly.** Coverage measures execution, not verification. A
+test that calls a function and asserts nothing raises the number and lowers the
+value — it converts an untested line into a line everyone believes is tested,
+which is worse than where we started. The rule is therefore: **coverage is a
+floor, never the goal.** The correctness weight is carried by the property tests
+of M1, the round-trip and kind-rule tests of M2, the aliasing guard of D3 and the
+NIST golden tests of M4. Coverage only ensures none of them has a blind spot.
+
+**Mechanics.** `go test -covermode=atomic -coverpkg=./... -coverprofile=…` across
+all packages, so cross-package calls count; a script strips generated files and
+the declared exceptions, then `go tool cover -func` yields the number CI compares
+against 100. The per-function output is part of the CI log, because "which
+function dropped" is the only useful form of a coverage failure.
+
+## 4. API sketch
+
+Not finished code — the shape against which the decisions are checked for mutual
+consistency.
+
+> **The prototype runs.** The core of this section is built as a working package
+> against Go 1.27 and apd/v3: dimensional algebra, exact fractions, all five kind
+> rules, generic methods, error types, and the aliasing guard from D3 with
+> 200-digit values. **Eight tests, green under `-race`.** The run exposed one
+> design flaw, now recorded in D9 — which is what it was for.
+
+```go
+// --- Core -------------------------------------------------------
+
+type Dimension uint64          // 7 × int8, packed (D5)
+type Kind      uint16          // bitflags, held separately (D5/D6)
+
+type Unit struct {             // value type, immutable (D1/D3)
+    dim    Dimension
+    kind   Kind
+    sym    Symbol
+    num    *apd.Decimal        // exact fraction (D4)
+    den    *apd.Decimal
+    offset *apd.Decimal
+}
+
+type Measurement struct {      // 40 bytes, copyable
+    unit Unit
+    val  apd.Decimal           // never written in place (D3)
+}
+
+// --- Construction and readout -----------------------------------
+
+m  := pressure.Bar.Of(2.5)                     // implicit N = float64
+m2 := pressure.Bar.OfString("2.50000000001")   // no float detour
+
+pa, err := m.In[float64](pressure.Pascal)      // 250000
+d,  err := m.In[*apd.Decimal](pressure.Pascal) // exact
+
+// --- Arithmetic -------------------------------------------------
+
+t, _ := temperature.Celsius.Of(20).
+        Add(interval.Kelvin.Of(5))             // 25 °C          (D6)
+
+_, err = temperature.Celsius.Of(20).
+        Add(temperature.Celsius.Of(5))         // ErrAbsoluteSum (D6)
+
+p, _ := force.Newton.Of(100).
+        Div(area.SquareMeter.Of(2))            // -> 50 Pa, kind dropped
+
+// --- Inspecting errors ------------------------------------------
+
+var de *metrology.DimensionError
+if errors.As(err, &de) {
+    log.Printf("expected %s, got %s", de.Want, de.Got)
+}
+```
+
+Text output picks the SI prefix automatically, in decimal arithmetic rather than
+through `math.Log`: a logarithmic search is prone to rounding errors at exactly
+the powers of ten where the prefix changes.
+
+---
+
+## 5. Package layout
+
+| Package | Contents | Status |
+|---|---|---|
+| `metrology` | Measurement, Unit, arithmetic, error types, serialisation | M2 |
+| `dimension` | packing, product, quotient, reciprocal, stringer | done (M1) |
+| `symbol` | SI prefixes, product, quotient and special forms | done (M1) |
+| `internal/superscript` | superscript digits for both stringers | done (M1) |
+| `parse` | reading the text form, resolving unit expressions | M5 |
+| `catalog` | YAML source plus generator | M3 |
+| `unitvet`, `cmd/unitvet` | static dimension checker per D13 | M6 |
+| `imperial` | customary units, planned; shape per O1 | after M4 |
+| `length`, `pressure`, … | one package per quantity, fully generated | M3 onward |
+| `internal/testutil` | property tests, aliasing guard, catalogue checks | M2 |
+
+One package per quantity, because it turns autocompletion into a search
+function: `pressure.` lists exactly the pressure units. Nobody maintains those
+packages by hand — they are generated (D8).
+
+---
+
+## 6. Quantity catalogue
+
+The existing catalogue covers mechanics and thermodynamics reasonably well — 39
+registered base units and 24 derived ones. The gap is contiguous: the
+electromagnetic, photometric and radiological part of SI.
+
+| Block | Status | Missing |
+|---|---|---|
+| SI base quantities | 5 of 7 | electric current (A), luminous intensity (cd) |
+| Named derived SI units | 5 of 22 | rad, sr, Hz, C, V, F, Ω, S, Wb, T, H, lm, lx, Bq, Gy, Sv, kat |
+| Mechanics, heat, material data | largely complete | mass flow rate, kinematic viscosity, surface tension, thermal diffusivity |
+| Process-engineering non-SI units | started | l/min, m³/h, kWh, mbar, mmH₂O, ppm/ppb, Nm³ |
+| Dimensionless numbers | `ratio` only | Re, Pr, Nu, Gr as named quantities on dimension 1 |
+
+The electromagnetic block is the largest single item and also the most
+mechanical: seven base units whose definitions all sit in the same source. It is
+therefore the first stress test for the generator from D8 — if the catalogue
+carries this block, it carries the rest.
+
+Dimension collisions cluster precisely in process engineering: `m²/s` is
+kinematic viscosity, thermal diffusivity and diffusion coefficient at once;
+`J/kg` is specific energy and specific enthalpy. D6 is therefore not a footnote
+but the rule that makes this catalogue consistent in the first place.
+
+---
+
+## 7. Milestones
+
+The order is not arbitrary: M1 through M3 establish the invariants that M4 then
+scales against. Parallelising only makes sense from M4 onward.
+
+### M0 — Repository, name, scaffolding
+
+New repo at `github.com/timzifer/metrology`, `go 1.27`, CI running build, vet,
+test under `-race` and the coverage gate of D14, licence, README with the target
+picture, `CLAUDE.md` carrying the invariants for agent sessions.
+
+**Done when:** CI is green on the empty module and the coverage gate demonstrably
+fails when a deliberately uncovered function is added.
+
+### M1 — Dimension and symbol
+
+The packed dimension word of D5 with the kind held outside it, and the symbol
+system with prefix selection in decimal arithmetic. Table-driven tests for
+product, quotient and reciprocal across all seven axes with negative exponents.
+
+**Done when:** a property test confirms `Product(q, q.Reciprocal()) == One` for
+random dimensions, and stringer output is correct for all target quantities.
+
+**Status: done.** Both packages are in the tree, `go vet` is clean, the suite is
+green under `-race`, and the coverage gate of D14 reports 100 %. What the
+implementation decided, beyond what was written above:
+
+- **`New` takes an `Exponents` struct.** `New(Exponents{Time: -2, Length: 1})`
+  allocates nothing, names every axis at the call site and gives
+  `Dimension.Exponents` a matching inverse — construction and destructuring read
+  the same way, which is what the generator of D8 will emit.
+- **The seven base dimensions are constants**, `dimension.L`, `dimension.T` and
+  so on, not package variables. D7 forbids global mutable state; a `const` is not
+  state at all.
+- **The stringer uses a fixed axis order**, `L M T I Θ N J`, rather than sorting
+  by exponent. D11's error message is read by someone comparing two dimension
+  strings; a fixed order means one differing exponent produces one differing
+  character, and sorting by exponent would permute `L²M¹T⁻²` against `L¹M¹T⁻²`.
+- **Exponent arithmetic wraps at the `int8` boundary and does not error.**
+  Reaching it takes 128 multiplications of the same axis. The alternative — an
+  error return on `Product` — would push a case that cannot occur into every
+  caller of the D6 arithmetic, and D14 would then demand a test for a branch that
+  is unreachable by construction.
+- **`Symbol` is a tagged value type, not an interface** (D1). Static,
+  SI-prefixable, gram, litre, product and quotient differ only in how they render
+  and which prefixes they accept — a switch, not a hierarchy.
+- **Prefix selection is exact decimal arithmetic** (D9). `floor(log10 |v|)` comes
+  from the digit count and the exponent of the `apd.Decimal`, and applying the
+  prefix is a shift of that exponent, so no digit is lost and 1000 m is exactly
+  1 km — a logarithmic search yields 999.9999999 m for the same input. The result
+  is trimmed of the trailing zeros the shift introduces, but not reduced past the
+  decimal point: 250 kPa stays `250`, not `2.5E+2`.
+- **One prefix step on `m²` is a factor of 10⁶**, on `m³` a factor of 10⁹.
+  `SIPow(text, power)` scales the step with the power and handles negative powers
+  such as the wavenumber m⁻¹.
+- **The kilogram is `symbol.Gram()`.** Magnitudes are in kilograms, prefixes
+  attach to the gram, and the unprefixed rendering is `kg` — the symbol always
+  names the unit the magnitude is in.
+- **`covercheck` merges the repeated records of a multi-package profile.** With
+  `-coverpkg=./...` every test binary reports every block of every package, so a
+  block covered by one package's tests also appears with count 0 in the profiles
+  of the others. Summing them is what `go tool cover` does; without it the gate
+  reported covered code as uncovered as soon as a second test package existed.
+
+### M2 — Core: Measurement, Unit, arithmetic
+
+The pivotal step. Value types per D1, apd/v3 per D2, immutability per D3, exact
+fractions per D4, precision policy per D9. A hand-maintained mini catalogue of
+eight units, just enough to exercise the arithmetic.
+
+**Done when:**
+- the aliasing guard from D3 is green
+- round-trip conversion across all mini-catalogue pairs reproduces exactly
+- each of the five kind rules from D6 has a test
+- `-race` is clean
+- coverage is 100 % per D14
+
+### M3 — Catalogue format and generator
+
+YAML schema, generator, generated quantity packages, generated catalogue map. The
+mini catalogue from M2 becomes the generator's first input. The generator checks
+for duplicate symbols and duplicate dimension/kind pairs at generation time and
+aborts, rather than panicking at runtime.
+
+**Done when:** `go generate ./...` reproducibly emits identical code, CI verifies
+that nothing ungenerated was committed, and the coverage filter demonstrably
+excludes the generated files.
+
+### M4 — Scaling the catalogue
+
+The actual breadth, now as data work. Order: electromagnetics as the stress test,
+then photometry and radiology, then the process-engineering gaps, finally the
+non-SI units. Every entry with a source citation.
+
+**Done when:**
+- all 7 base and 22 named derived SI units are present
+- a golden test reproduces the conversion tables from NIST SP 811
+- every unit has a source recorded in the catalogue
+
+### M5 — Edges: parsing, serialisation, documentation
+
+Reading and writing the text form, JSON and SQL, godoc with runnable examples per
+package, README. Fuzz test on the parser.
+
+**Done when:**
+- the round-trip property holds across the entire catalogue
+- fuzzing finds no crash in one hour
+- every exported symbol is documented
+- coverage is 100 % per D14, `COVERAGE_EXCEPTIONS.md` reviewed and short
+
+### M6 — `unitvet`, the static dimension checker
+
+Per D13. Depends on M3, because the pass's dimension table is generated from the
+same catalogue. Can be started as soon as the core API from M2 is stable, and
+should be — every catalogue entry added in M4 then extends its reach for free.
+
+The pass runs against the library's own test corpus first: a testdata package
+holding one function per pattern in the D13 table, half of them expected to be
+reported and half expected to stay silent. `analysistest` makes both directions
+assertable.
+
+**Done when:**
+- `go vet -vettool=unitvet ./...` reports every seeded conflict in testdata
+- and reports nothing on the not-provable cases
+- the dimension table is generated, never hand-maintained
+- running the pass over the library's own examples and tests is clean
+
+Tagging starts at M2 as `v0.x`. `v1.0.0` comes only after M5 and after a
+deliberate API review — any stability promise made before that is one to regret
+later. M6 may ship after v1.0 as a separate tool version; it is additive and
+breaks nothing.
+
+---
+
+## 8. Deferred
+
+| Topic | Rationale |
+|---|---|
+| Fractional exponents | Occur in correlations (e.g. `m·s⁻⁰·⁵`) but require rationals instead of `int8` in the dimension word. The eight reserved bits from D5 keep that door open. |
+| Measurement uncertainty | A large topic of its own with its own error propagation. Sensible as a layer on top, not in the core. |
+| Non-linear scales | dB, pH, degrees Baumé. They do not fit the factor/offset model of D4 and need their own abstraction. |
+| Localised output | Decimal comma, unit names per language. Maintainable only once the catalogue is settled. |
+| Vector and tensor quantities | A different subject. A library for scalar quantities stays one. |
+
+---
+
+## 9. Risks
+
+| Risk | Mitigation |
+|---|---|
+| The aliasing invariant breaks unnoticed | It is the one rule whose violation causes silent data corruption. Hence the dedicated guard test in M2, using values above 38 digits — below that threshold apd/v3 masks the bug. |
+| Decimal arithmetic is too slow | Measured: 783 ns per conversion at 20 digits, versus 0.34 ns for `float64`. Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings. Carry benchmarks from M2 onward. If it binds, the escape is a fast path for values that fit losslessly in `int64` — not a return to `float64`. |
+| The generator becomes a project of its own | Hard time box on M3. It may be ugly; it only has to be deterministic. |
+| Kind semantics proliferate | Every new kind needs a justification in the catalogue. No dimension collision and no affinity, no kind. |
+| `unitvet` produces a false positive | The one failure mode that kills the tool, because users disable it and then get nothing. Every rule must be provable before it reports; `analysistest` asserts the silent cases as explicitly as the reported ones. Prefer missing a real bug over inventing one. |
+| `unitvet` drifts from the library | Prevented by construction: its dimension table is generated from the catalogue of D8, in the same `go generate` run. A hand-maintained second table would be the defect waiting to happen. |
+| The coverage target degrades into assertion-free tests | The known failure mode of a 100 % rule. Mitigated by keeping the correctness weight in property and golden tests, and by treating a coverage-only test in review as a defect. If the number is ever met by tests that assert nothing, the rule has done harm. |
+| Go 1.27 as a minimum deters adopters | Accepted deliberately. By v1.0, 1.27 will be one release behind current. The fallback is free functions instead of generic methods — a cost in ergonomics, not in substance. |
+
+---
+
+## 10. Open questions
+
+### O1 — Non-SI units: subpackage or separate module?
+
+**Status:** open, with a recommendation
+
+A sister package mapping customary units — foot, stone, psi, BTU, gallon — is
+planned for the medium term. Two shapes are possible.
+
+**Recommendation: a subpackage, `github.com/timzifer/metrology/imperial`.** Go
+links only what is imported, so callers who never touch stones pay nothing for
+their existence. And per D8 these are simply more catalogue entries, produced by
+the same generator; a separate module means either exporting the generator or
+duplicating it.
+
+The argument for a separate module is real but narrower than it looks: the core
+promises auditability against the SI Brochure, and customary units have different
+provenance and uneven exactness — some are exact by international agreement
+(1 in = 25.4 mm since 1959), others are historically muddy. Keeping that
+distinction visible is worth doing. A subpackage with its own catalogue file and
+its own source column achieves it without a second module path, a second release
+cadence and a second CI pipeline.
+
+Decide before M4, because it determines whether the generator emits into one
+module or two.
+
+### O2 — Default precision — now decidable from data
+
+**Status:** open, with a recommendation
+
+D9 named 34 digits because that matches decimal128 and therefore follows a
+citable standard. The prototype shows what the standard costs — one `bar → torr`
+conversion, i.e. one offset, one multiplication, one division:
+
+| Precision | Per conversion | Allocations |
+|---|---:|---:|
+| 20 digits | 783 ns | 1 |
+| 34 digits (decimal128) | 1541 ns | 7 |
+| 50 digits | 3089 ns | 15 |
+| `float64` for reference | 0.34 ns | 0 |
+
+Going from 20 to 34 costs twice the time and seven times the allocations without
+benefiting any physical measurement — no sensor in this domain delivers more than
+six to eight trustworthy digits. **Recommendation: 20 digits as the default**,
+with decimal128 reachable through the `Engine` value. The decision must be made
+before v1, because it fixes the rounding behaviour of every result.
+
+---
+
+## 11. Appendix: verification log
+
+Every claim in this document about Go 1.27, apd, and runtime cost was measured,
+not estimated. Reproduction steps:
+
+### Go 1.27 language capabilities
+
+```
+git clone --depth 1 --branch go1.27.0 https://github.com/golang/go.git
+cd go/src && GOROOT_BOOTSTRAP=<go1.24+> ./make.bash
+```
+
+| Construct | Result |
+|---|---|
+| `func (b Box[E]) Map[R any](f func(E) R) Box[R]` | compiles |
+| `type I interface { M[T any](t T) }` | `interface method must have no type parameters` |
+| `map[int]slice` where `type slice[A any] []details[A]` | `cannot use generic type slice[A any] without instantiation` |
+| `var _ = Q[2, -1]{}` | `syntax error: unexpected -, expected ]` |
+| `func Mul[A int, B int](…) Q[A + B, int]` | `syntax error: unexpected +, expected ]` |
+
+### apd copy aliasing
+
+Copy an `apd.Decimal` by value, mutate one copy in place, observe the other:
+
+| Digits | apd/v2 | apd/v3 |
+|---:|---|---|
+| 10 | corrupted | intact |
+| 30 | corrupted | intact |
+| 38 | corrupted | intact |
+| 40 | corrupted | **corrupted** |
+| 100 | corrupted | **corrupted** |
+| 500 | corrupted | **corrupted** |
+
+### Static dimension checking (D13)
+
+A working `go/analysis` pass was built against `golang.org/x/tools` and run over a
+seven-function test corpus, both standalone and as `go vet -vettool=`. Results
+matched the design intent exactly: three seeded conflicts reported — including one
+resolved across a package boundary through the fact mechanism — and four cases
+correctly left silent, of which two are conflicts that are not statically
+provable (runtime-selected unit, unit arriving as a parameter).
+
+The one implementation detail worth recording, because it costs an hour to
+rediscover: `buildssa` runs with `ssa.BuilderMode(0)`, so generic methods are not
+instantiated uniformly, and a call to `Of[float64]` reports its name as
+`Of[float64]`. Normalise through `(*ssa.Function).Origin()` before comparing
+method names, or every generic constructor silently fails to resolve and the pass
+reports nothing at all.
+
+### Sources
+
+- [Generic Methods in Go 1.27](https://go.dev/blog/generic-methods)
+- [golang/go#77273 — spec: generic methods for Go](https://github.com/golang/go/issues/77273)
+- SI Brochure, 9th edition (BIPM) — for catalogue verification in M4
+- NIST SP 811 — for the conversion golden tests in M4
