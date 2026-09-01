@@ -1,44 +1,103 @@
 package catalog_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/timzifer/metrology"
+	"github.com/timzifer/metrology/absorbeddose"
+	"github.com/timzifer/metrology/activity"
+	"github.com/timzifer/metrology/angle"
 	"github.com/timzifer/metrology/area"
 	"github.com/timzifer/metrology/catalog"
 	"github.com/timzifer/metrology/dimension"
+	"github.com/timzifer/metrology/dose"
+	"github.com/timzifer/metrology/energy"
 	"github.com/timzifer/metrology/force"
+	"github.com/timzifer/metrology/frequency"
 	"github.com/timzifer/metrology/interval"
 	"github.com/timzifer/metrology/length"
+	"github.com/timzifer/metrology/luminosity"
+	"github.com/timzifer/metrology/luminousflux"
+	"github.com/timzifer/metrology/mass"
 	"github.com/timzifer/metrology/pressure"
+	"github.com/timzifer/metrology/ratio"
+	"github.com/timzifer/metrology/solidangle"
+	"github.com/timzifer/metrology/specificheat"
 	"github.com/timzifer/metrology/temperature"
+	"github.com/timzifer/metrology/volumeflow"
 )
 
 func TestCanonical(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		dim  dimension.Dimension
-		kind metrology.Kind
-		want metrology.Unit
+		unit metrology.Unit
 	}{
-		{"length", length.Metre.Dimension(), metrology.Interval, length.Metre},
-		{"area", area.SquareMetre.Dimension(), metrology.Interval, area.SquareMetre},
-		{"force", force.Newton.Dimension(), metrology.Interval, force.Newton},
-		{"pressure", pressure.Pascal.Dimension(), metrology.Interval, pressure.Pascal},
-		// One dimension, two canonical units: a temperature and a temperature
-		// difference are different quantities on the same axis (D6).
-		{"temperature as a point", temperature.Kelvin.Dimension(), metrology.Absolute, temperature.Kelvin},
-		{"temperature as a span", interval.Kelvin.Dimension(), metrology.Interval, interval.Kelvin},
+		{"length", length.Metre},
+		{"area", area.SquareMetre},
+		{"force", force.Newton},
+		{"pressure", pressure.Pascal},
+		{"energy", energy.Joule},
+		{"volume flow", volumeflow.CubicMetrePerSecond},
+		// One dimension, two kinds: a temperature and a temperature difference
+		// are read on the same axis and are not interchangeable (D6).
+		{"temperature as a point", temperature.Kelvin},
+		{"temperature as a span", interval.Kelvin},
+		// One dimension, two quantities. Both are canonical, and which one you
+		// get depends on what you say you are measuring.
+		{"frequency", frequency.Hertz},
+		{"radioactivity", activity.Becquerel},
+		{"absorbed dose", absorbeddose.Gray},
+		{"dose equivalent", dose.Sievert},
+		{"luminous intensity", luminosity.Candela},
+		{"luminous flux", luminousflux.Lumen},
+		{"a plane angle", angle.Radian},
+		{"a solid angle", solidangle.Steradian},
+		{"a bare ratio", ratio.One},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := catalog.Canonical(tc.dim, tc.kind)
+			got, ok := catalog.Canonical(tc.unit.Dimension(), tc.unit.Kind(), tc.unit.Quantity())
 			if !ok {
-				t.Fatalf("no canonical unit for %s", tc.dim)
+				t.Fatalf("no canonical unit for %s as %s", tc.unit.Dimension(), tc.unit.Quantity())
 			}
-			if !got.Equal(tc.want) {
-				t.Errorf("got %s, want %s", got, tc.want)
+			if !got.Equal(tc.unit) {
+				t.Errorf("got %s, want %s", got, tc.unit)
 			}
 		})
+	}
+}
+
+// The tag is what keeps two quantities on one dimension apart — and asking for
+// the wrong one is an error rather than a plausible number.
+func TestQuantitiesSharingADimension(t *testing.T) {
+	if frequency.Hertz.Dimension() != activity.Becquerel.Dimension() {
+		t.Fatal("the hertz and the becquerel no longer share a dimension")
+	}
+
+	if _, err := frequency.Hertz.Of(50).To(activity.Becquerel); !errors.Is(err, metrology.ErrQuantity) {
+		t.Errorf("50 Hz converted to becquerel: %v", err)
+	}
+	if _, err := absorbeddose.Gray.Of(1).Add(dose.Sievert.Of(1)); !errors.Is(err, metrology.ErrQuantity) {
+		t.Errorf("a gray was added to a sievert: %v", err)
+	}
+	if _, err := angle.Radian.Of(1).Add(ratio.One.Of(1)); err != nil {
+		t.Errorf("an untagged ratio would not join a plane angle: %v", err)
+	}
+
+	// A computed magnitude carries no tag (D6), so it can still be named — that
+	// is what makes the untagged case the useful one rather than a hole.
+	q, err := energy.Joule.Of(10).Div(mass.Kilogram.Of(2))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if q.Quantity() != "" {
+		t.Errorf("a quotient carries the tag %q", q.Quantity())
+	}
+	if _, err := q.To(absorbeddose.Gray); err != nil {
+		t.Errorf("an untagged J/kg would not become a gray: %v", err)
+	}
+	if _, err := q.To(dose.Sievert); err != nil {
+		t.Errorf("an untagged J/kg would not become a sievert: %v", err)
 	}
 }
 
@@ -46,13 +105,18 @@ func TestCanonical(t *testing.T) {
 // rather than a failure: a length over a mass is a perfectly good quantity.
 func TestCanonicalReportsWhatItDoesNotHave(t *testing.T) {
 	odd := dimension.New(dimension.Exponents{Length: 1, Mass: -1})
-	if _, ok := catalog.Canonical(odd, metrology.Interval); ok {
+	if _, ok := catalog.Canonical(odd, metrology.Interval, ""); ok {
 		t.Errorf("the catalogue claims a unit for %s", odd)
 	}
 	// The dimension exists, the kind does not: there is no absolute pressure
 	// scale in this catalogue.
-	if _, ok := catalog.Canonical(pressure.Pascal.Dimension(), metrology.Absolute); ok {
+	if _, ok := catalog.Canonical(pressure.Pascal.Dimension(), metrology.Absolute, ""); ok {
 		t.Error("the catalogue claims an absolute pressure unit")
+	}
+	// The dimension and kind exist, the quantity does not: T⁻¹ is a frequency
+	// or a radioactivity, and untagged it is neither.
+	if _, ok := catalog.Canonical(frequency.Hertz.Dimension(), metrology.Interval, ""); ok {
+		t.Error("the catalogue claims an untagged unit for T⁻¹")
 	}
 }
 
@@ -66,6 +130,11 @@ func TestBySymbol(t *testing.T) {
 		{"bar", metrology.Interval, pressure.Bar},
 		{"Torr", metrology.Interval, pressure.Torr},
 		{"m²", metrology.Interval, area.SquareMetre},
+		{"kg", metrology.Interval, mass.Kilogram},
+		{"J/(kg·K)", metrology.Interval, specificheat.JoulePerKilogramKelvin},
+		{"m³/h", metrology.Interval, volumeflow.CubicMetrePerHour},
+		{"Hz", metrology.Interval, frequency.Hertz},
+		{"Bq", metrology.Interval, activity.Becquerel},
 		{"°C", metrology.Absolute, temperature.Celsius},
 		// The same text, two kinds, two units. This is why the kind is part of
 		// the key rather than a detail of the value.
@@ -185,7 +254,7 @@ func TestQuotientResolvesThroughTheCatalogue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	unit, ok := catalog.Canonical(q.Dimension(), q.Kind())
+	unit, ok := catalog.Canonical(q.Dimension(), q.Kind(), q.Quantity())
 	if !ok {
 		t.Fatalf("no canonical unit for %s", q.Dimension())
 	}

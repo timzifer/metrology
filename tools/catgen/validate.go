@@ -63,15 +63,17 @@ func validate(c *catalogue) error {
 			report("unit %s: %v", u.ID, err)
 		}
 
-		// Exactly one canonical unit per dimension and kind. This is the check
-		// that used to be a runtime panic when two packages claimed the same
-		// dimension; here it is a failed build.
+		// Exactly one canonical unit per dimension, kind and quantity. This is
+		// the check that used to be a runtime panic when two packages claimed
+		// the same dimension; here it is a failed build. The quantity is part
+		// of the key because the hertz and the becquerel legitimately claim
+		// the same dimension and are not the same unit (D6).
 		if u.Canonical {
-			key := q.Dimension.dimensionExpr() + "\x00" + u.kindExpr()
-			if previous, seen := canonical[key]; seen {
-				report("two canonical units for the same dimension and kind: %s and %s", previous, u.ID)
+			if previous, seen := canonical[canonicalKey(u)]; seen {
+				report("two canonical units for the same dimension, kind and quantity: %s and %s",
+					previous, u.ID)
 			}
-			canonical[key] = u.ID
+			canonical[canonicalKey(u)] = u.ID
 		}
 
 		if err := validateFactor(u); err != nil {
@@ -84,14 +86,14 @@ func validate(c *catalogue) error {
 		}
 	}
 
-	// Every dimension and kind that occurs must have a canonical unit, or a
-	// result computed into that dimension has nothing to be expressed in.
+	// Every dimension, kind and quantity that occurs must have a canonical
+	// unit, or a result computed into that dimension has nothing to be
+	// expressed in.
 	for _, u := range c.units() {
-		key := u.quantity.Dimension.dimensionExpr() + "\x00" + u.kindExpr()
-		if _, ok := canonical[key]; !ok {
+		if _, ok := canonical[canonicalKey(u)]; !ok {
 			report("no canonical unit for the dimension of package %q, kind %s",
 				u.quantity.Package, strings.TrimPrefix(u.kindExpr(), "metrology."))
-			canonical[key] = u.ID // report once
+			canonical[canonicalKey(u)] = u.ID // report once
 		}
 	}
 
@@ -118,6 +120,12 @@ func validate(c *catalogue) error {
 	}
 	sort.Strings(problems)
 	return fmt.Errorf("catalogue is invalid:\n  %s", strings.Join(problems, "\n  "))
+}
+
+// canonicalKey identifies the slot a canonical unit fills: one per dimension,
+// kind and quantity.
+func canonicalKey(u unitSpec) string {
+	return u.quantity.Dimension.dimensionExpr() + "\x00" + u.kindExpr() + "\x00" + u.quantityTag()
 }
 
 // validateFactor checks what [metrology.NewUnit] would check, before the

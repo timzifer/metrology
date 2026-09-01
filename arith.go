@@ -22,7 +22,7 @@ func (m Measurement) Add(other Measurement) (Measurement, error) {
 
 // Add is [Measurement.Add] at this engine's precision (D9).
 func (e Engine) Add(left, right Measurement) (Measurement, error) {
-	if err := sameDimension("Add", left, right); err != nil {
+	if err := sameQuantity("Add", left, right); err != nil {
 		return Measurement{}, err
 	}
 	kind, ok := addKind(left.unit.kind, right.unit.kind)
@@ -58,7 +58,7 @@ func (m Measurement) Sub(other Measurement) (Measurement, error) {
 
 // Sub is [Measurement.Sub] at this engine's precision (D9).
 func (e Engine) Sub(left, right Measurement) (Measurement, error) {
-	if err := sameDimension("Sub", left, right); err != nil {
+	if err := sameQuantity("Sub", left, right); err != nil {
 		return Measurement{}, err
 	}
 	kind, ok := subKind(left.unit.kind, right.unit.kind)
@@ -104,6 +104,10 @@ func (e Engine) combine(
 	if err != nil {
 		return Measurement{}, err
 	}
+	// An untagged operand takes on the quantity of the tagged one: adding an
+	// untagged T⁻¹ to a frequency yields a frequency, and there is nothing
+	// else it could yield.
+	result.quantity = left.unit.quantity.resolve(right.unit.quantity)
 
 	value := new(apd.Decimal)
 	exact := exactContext()
@@ -181,7 +185,7 @@ func (m Measurement) Cmp(other Measurement) (int, error) {
 
 // Cmp is [Measurement.Cmp] at this engine's precision (D9).
 func (e Engine) Cmp(left, right Measurement) (int, error) {
-	if err := sameDimension("Cmp", left, right); err != nil {
+	if err := sameQuantity("Cmp", left, right); err != nil {
 		return 0, err
 	}
 	if left.unit.kind != right.unit.kind {
@@ -205,11 +209,19 @@ func (m Measurement) Equal(other Measurement) bool {
 	return err == nil && cmp == 0
 }
 
-// sameDimension is the runtime check that stands in for the compile error Go
-// cannot give (D1/D11).
-func sameDimension(op string, left, right Measurement) error {
+// sameQuantity is the runtime check that stands in for the compile error Go
+// cannot give (D1/D11): the dimensions must match, and where both operands say
+// which quantity they are, those must match too.
+//
+// The dimension is checked first, because it is the coarser mistake and the
+// more useful message: adding a length to a pressure is a different kind of
+// wrong from adding a frequency to a radioactivity.
+func sameQuantity(op string, left, right Measurement) error {
 	if left.unit.dim != right.unit.dim {
 		return &DimensionError{Op: op, Want: left.unit.dim, Got: right.unit.dim}
+	}
+	if !left.unit.quantity.compatible(right.unit.quantity) {
+		return &QuantityError{Op: op, Left: left.unit.quantity, Right: right.unit.quantity}
 	}
 	return nil
 }

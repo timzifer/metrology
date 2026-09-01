@@ -8,10 +8,11 @@ dimensional analysis, and one package per quantity so that autocompletion double
 as a catalogue.
 
 > **Status: under construction.** The architecture is settled and written down in
-> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M3. The code below
-> runs — the core, the generator and a starter catalogue exist — but the
-> catalogue covers a dozen units rather than the SI, and the API will change
-> without notice until `v1.0.0`.
+> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M4. The code below
+> runs, and the catalogue holds the SI — seven base units, twenty-two named
+> derived units, and the non-SI units of NIST SP 811 that process engineering
+> uses. Still missing: the text form and its parser. The API will change without
+> notice until `v1.0.0`.
 
 ```go
 p := pressure.Bar.Of(2.5)
@@ -35,6 +36,13 @@ of a pre-rounded constant. `760 torr` is exactly `101325 Pa`.
 25 °C − 20 °C is 5 K, an interval, not a temperature. 20 °C + 5 °C is an error,
 because it is meaningless. The rules are explicit rather than special-cased for
 temperature.
+
+**Quantities that share a dimension stay apart.** The hertz and the becquerel are
+both `T⁻¹`, the gray and the sievert both `L²T⁻²`, a plane angle and a bare ratio
+are both dimensionless. Each carries the quantity it measures, so 50 Hz asked for
+in becquerel is an error rather than 50 Bq. A computed magnitude carries no such
+tag — a quotient of a force by an area knows only the exponents — so it can still
+be named as whatever the caller means it to be.
 
 **Dimensional errors say what went wrong.** Go cannot express dimensional
 analysis in its type system — there are no integer type parameters, so a
@@ -65,8 +73,14 @@ and the catalogue index:
 Every entry carries a source, because a conversion factor is a claim about the
 world and a claim without a citation cannot be checked. The generator refuses a
 catalogue with a missing source, a duplicate symbol, two units claiming the same
-dimension, or a factor that is not a number — at generation time, so a defective
-catalogue is a failed build rather than a panic in production.
+dimension and quantity, or a factor that is not a number — at generation time, so
+a defective catalogue is a failed build rather than a panic in production.
+
+Every factor is **exact**, and units that cannot be exact are left out rather
+than rounded in: the degree of arc is π/180 radians, which has no finite decimal
+fraction, so it waits for symbolic factors instead of shipping as
+`0.017453292519943295`. A golden test checks the whole catalogue against the
+factors printed in NIST SP 811.
 
 For the cases where the unit is not known at compile time — a symbol read from a
 configuration file, or a computed dimension that needs a unit to be expressed

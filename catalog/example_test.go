@@ -7,6 +7,7 @@ import (
 	"github.com/timzifer/metrology/area"
 	"github.com/timzifer/metrology/catalog"
 	"github.com/timzifer/metrology/force"
+	"github.com/timzifer/metrology/frequency"
 	"github.com/timzifer/metrology/pressure"
 	"github.com/timzifer/metrology/temperature"
 )
@@ -20,7 +21,7 @@ func ExampleCanonical() {
 		panic(err)
 	}
 
-	unit, ok := catalog.Canonical(q.Dimension(), q.Kind())
+	unit, ok := catalog.Canonical(q.Dimension(), q.Kind(), q.Quantity())
 	if !ok {
 		panic("no canonical unit")
 	}
@@ -60,8 +61,23 @@ func ExampleBySymbol_kind() {
 }
 
 func ExampleUnits() {
-	fmt.Println(len(catalog.Units()), "units, first one:", catalog.Units()[0])
-	// Output: 12 units, first one: bar
+	fmt.Println(len(catalog.Units()), "units in the catalogue")
+	// Output: 82 units in the catalogue
+}
+
+func ExampleCanonical_quantity() {
+	// T⁻¹ is a frequency and a radioactivity. Which unit the catalogue hands
+	// back depends on which of the two you say you mean.
+	hz, _ := catalog.Canonical(frequency.Hertz.Dimension(), metrology.Interval, "frequency")
+	bq, _ := catalog.Canonical(frequency.Hertz.Dimension(), metrology.Interval, "radioactivity")
+	fmt.Println(hz, bq)
+
+	// And a magnitude in one is not a magnitude in the other.
+	_, err := frequency.Hertz.Of(50).To(bq)
+	fmt.Println(err)
+	// Output:
+	// Hz Bq
+	// metrology: To: frequency and radioactivity share a dimension but are different quantities
 }
 
 func Example_quantityPackages() {

@@ -17,12 +17,14 @@ import (
 	"github.com/timzifer/metrology/dimension"
 )
 
-// key identifies a canonical unit: a dimension together with the kind of
-// quantity read on it. Temperature has two — a point on the scale and a span
-// along it — and they are not interchangeable (D6).
+// key identifies a canonical unit: a dimension, the kind of quantity read on it
+// and — where the dimension is shared — which quantity it is. Temperature has
+// two kinds, a point on the scale and a span along it; T⁻¹ has two quantities,
+// a frequency and a radioactivity (D6).
 type key struct {
-	dim  dimension.Dimension
-	kind metrology.Kind
+	dim      dimension.Dimension
+	kind     metrology.Kind
+	quantity metrology.Quantity
 }
 
 // symbolKey identifies a unit by how it prints. The kind is part of it because
@@ -32,14 +34,20 @@ type symbolKey struct {
 	kind metrology.Kind
 }
 
-// Canonical returns the unit a quantity of this dimension and kind is expressed
-// in — the pascal for a pressure, the metre for a length.
+// Canonical returns the unit a magnitude of this dimension, kind and quantity is
+// expressed in — the pascal for a pressure, the metre for a length.
 //
-// It reports false where the catalogue has no unit for that dimension, which is
-// the ordinary answer for a dimension nobody has named: a quotient of a length
-// by a mass is a perfectly good quantity with no unit of its own.
-func Canonical(dim dimension.Dimension, kind metrology.Kind) (metrology.Unit, bool) {
-	u, ok := canonical[key{dim: dim, kind: kind}]
+// The quantity is usually empty, and empty is a value like any other here: it
+// selects the unit for the dimension's ordinary reading. Where a dimension
+// carries more than one quantity, the tag chooses between them — T⁻¹ untagged
+// has no canonical unit, while T⁻¹ tagged as a frequency is the hertz and as a
+// radioactivity the becquerel.
+//
+// It reports false where the catalogue has no such unit, which is the ordinary
+// answer for a dimension nobody has named: a length over a mass is a perfectly
+// good quantity with no unit of its own.
+func Canonical(dim dimension.Dimension, kind metrology.Kind, quantity metrology.Quantity) (metrology.Unit, bool) {
+	u, ok := canonical[key{dim: dim, kind: kind, quantity: quantity}]
 	return u, ok
 }
 

@@ -19,3 +19,13 @@ var Newton = metrology.MustUnit(metrology.UnitDef{
 	Dimension: dim,
 	Symbol:    symbol.SI("N"),
 })
+
+// Dyne is the CGS unit of force, a hundred-thousandth of a newton.
+//
+// Source: NIST SP 811 (2008), Appendix B.8
+var Dyne = metrology.MustUnit(metrology.UnitDef{
+	Dimension:   dim,
+	Symbol:      symbol.Static("dyn"),
+	Numerator:   "1",
+	Denominator: "100000",
+})

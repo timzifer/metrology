@@ -9,13 +9,19 @@
 # the factors are exact fractions (D4): "101325/760" can be compared to the SI
 # Brochure character by character, 133.32236842105263 cannot.
 #
+# Every factor here is exact. Where a unit is defined through π — the degree of
+# arc, the oersted — no exact decimal fraction exists, and the unit is left out
+# rather than rounded into the catalogue. See section 8 of CONCEPT.md.
+#
 # Fields
 #
 #   quantities[].package    the generated Go package name
 #   quantities[].dimension  the seven SI exponents, omitted ones are zero
+#   quantities[].quantity   what these units measure, where the dimension is
+#                           shared by more than one quantity (D6)
 #   units[].id              catalogue-wide identifier, referenced by interval:
 #   units[].go              the generated Go identifier
-#   units[].canonical       exactly one per dimension and kind
+#   units[].canonical       exactly one per dimension, kind and quantity
 #   units[].symbol          form: static | si | si_pow | gram | litre
 #                                 | product | quotient
 #   units[].factor          num/den, an exact fraction; both default to 1
@@ -27,6 +33,41 @@
 #     base = (magnitude + offset) · num / den
 
 quantities:
+  # ---------------------------------------------------------------- SI base --
+
+  - package: duration
+    doc: |
+      Time, the SI base quantity.
+
+      The package is not called time, because a program that measures durations
+      usually imports the standard library package of that name as well.
+    dimension: {time: 1}
+    units:
+      - id: second
+        go: Second
+        canonical: true
+        doc: the SI base unit of time
+        symbol: {form: si, text: s}
+        source: SI Brochure 9th ed., §2.3.1
+      - id: minute
+        go: Minute
+        doc: sixty seconds
+        symbol: {form: static, text: min}
+        factor: {num: "60"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: hour
+        go: Hour
+        doc: sixty minutes
+        symbol: {form: static, text: h}
+        factor: {num: "3600"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: day
+        go: Day
+        doc: twenty-four hours
+        symbol: {form: static, text: d}
+        factor: {num: "86400"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+
   - package: length
     doc: Length, the SI base quantity of extent.
     dimension: {length: 1}
@@ -43,54 +84,68 @@ quantities:
         symbol: {form: static, text: km}
         factor: {num: "1000"}
         source: SI Brochure 9th ed., §3 (SI prefixes)
-
-  - package: area
-    doc: Area, length squared.
-    dimension: {length: 2}
-    units:
-      - id: square_metre
-        go: SquareMetre
-        canonical: true
-        doc: the SI unit of area
-        symbol: {form: si_pow, text: m, power: 2}
-        source: SI Brochure 9th ed., §2.3.4 Table 3
-
-  - package: force
-    doc: Force, mass times acceleration.
-    dimension: {length: 1, mass: 1, time: -2}
-    units:
-      - id: newton
-        go: Newton
-        canonical: true
-        doc: the SI unit of force, kg·m·s⁻²
-        symbol: {form: si, text: N}
-        source: SI Brochure 9th ed., §2.3.4 Table 4
-
-  - package: pressure
-    doc: Pressure, force per area.
-    dimension: {length: -1, mass: 1, time: -2}
-    units:
-      - id: pascal
-        go: Pascal
-        canonical: true
-        doc: the SI unit of pressure, N·m⁻²
-        symbol: {form: si, text: Pa}
-        source: SI Brochure 9th ed., §2.3.4 Table 4
-      - id: bar
-        go: Bar
-        doc: exactly 100 kPa
-        symbol: {form: static, text: bar}
-        factor: {num: "100000"}
-        source: SI Brochure 9th ed., §4.1 Table 8
-      - id: torr
-        go: Torr
-        doc: one 760th of the standard atmosphere
-        symbol: {form: static, text: Torr}
-        # Exact by definition: the standard atmosphere is 101325 Pa and the
-        # torr is one 760th of it. Pre-divided, this factor is 133.322368…,
-        # and 760 Torr stops being 101325 Pa (D4).
-        factor: {num: "101325", den: "760"}
+      - id: angstrom
+        go: Angstrom
+        doc: a ten-billionth of a metre, the scale of an atomic radius
+        symbol: {form: static, text: "Å"}
+        factor: {num: "1", den: "10000000000"}
         source: NIST SP 811 (2008), Appendix B.8
+
+  - package: mass
+    doc: Mass, the SI base quantity of inertia.
+    dimension: {mass: 1}
+    units:
+      - id: kilogram
+        go: Kilogram
+        canonical: true
+        doc: the SI base unit of mass, and the one whose name already carries a prefix
+        symbol: {form: gram}
+        source: SI Brochure 9th ed., §2.3.1
+      - id: tonne
+        go: Tonne
+        doc: a thousand kilograms
+        symbol: {form: static, text: t}
+        factor: {num: "1000"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+
+  - package: current
+    doc: Electric current, the SI base quantity of charge flow.
+    dimension: {electric_current: 1}
+    units:
+      - id: ampere
+        go: Ampere
+        canonical: true
+        doc: the SI base unit of electric current
+        symbol: {form: si, text: A}
+        source: SI Brochure 9th ed., §2.3.1
+
+  - package: substance
+    doc: Amount of substance, counted in entities rather than measured.
+    dimension: {amount_of_substance: 1}
+    units:
+      - id: mole
+        go: Mole
+        canonical: true
+        doc: the SI base unit of amount of substance
+        symbol: {form: si, text: mol}
+        source: SI Brochure 9th ed., §2.3.1
+
+  - package: luminosity
+    doc: |
+      Luminous intensity: radiant power in a direction, weighted by the response
+      of the eye.
+
+      It shares its dimension with luminous flux — the steradian is
+      dimensionless — which is why both carry a quantity tag (D6).
+    dimension: {luminous_intensity: 1}
+    quantity: luminous intensity
+    units:
+      - id: candela
+        go: Candela
+        canonical: true
+        doc: the SI base unit of luminous intensity
+        symbol: {form: si, text: cd}
+        source: SI Brochure 9th ed., §2.3.1
 
   - package: interval
     doc: |
@@ -151,3 +206,641 @@ quantities:
         offset: "459.67"
         interval: rankine_interval
         source: NIST SP 811 (2008), Appendix B.8
+
+  # ------------------------------------------------- dimensionless readings --
+
+  - package: ratio
+    doc: |
+      Dimensionless ratios: a number that came from dividing like by like.
+
+      A ratio has no dimension, which is exactly why it needs saying: 5 % and
+      5 ppm are the same dimension and not the same number.
+    dimension: {}
+    units:
+      - id: one
+        go: One
+        canonical: true
+        doc: the dimensionless unit, a bare number
+        symbol: {form: static, text: "1"}
+        source: SI Brochure 9th ed., §2.3.3
+      - id: percent
+        go: Percent
+        doc: one part in a hundred
+        symbol: {form: static, text: "%"}
+        factor: {num: "1", den: "100"}
+        source: SI Brochure 9th ed., §5.4.7
+      - id: permille
+        go: PerMille
+        doc: one part in a thousand
+        symbol: {form: static, text: "‰"}
+        factor: {num: "1", den: "1000"}
+        source: SI Brochure 9th ed., §5.4.7
+      - id: ppm
+        go: PartsPerMillion
+        doc: one part in a million, as used for trace concentrations
+        symbol: {form: static, text: ppm}
+        factor: {num: "1", den: "1000000"}
+        source: SI Brochure 9th ed., §5.4.7 (which advises naming the quantity instead)
+      - id: ppb
+        go: PartsPerBillion
+        doc: one part in a thousand million
+        symbol: {form: static, text: ppb}
+        factor: {num: "1", den: "1000000000"}
+        source: SI Brochure 9th ed., §5.4.7 (which advises naming the quantity instead)
+
+  - package: angle
+    doc: |
+      Plane angle.
+
+      An angle is a ratio of two lengths and therefore dimensionless, which is
+      why it carries a quantity tag: without one, an angle and a bare number
+      would be the same thing to the arithmetic (D6).
+
+      The degree of arc is not here. It is π/180 radians, and π has no exact
+      decimal fraction — a rounded factor in this catalogue would be exactly
+      what D4 forbids.
+    dimension: {}
+    quantity: plane angle
+    units:
+      - id: radian
+        go: Radian
+        canonical: true
+        doc: the SI unit of plane angle
+        symbol: {form: static, text: rad}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: solidangle
+    doc: |
+      Solid angle: the two-dimensional counterpart of the radian, and equally
+      dimensionless.
+    dimension: {}
+    quantity: solid angle
+    units:
+      - id: steradian
+        go: Steradian
+        canonical: true
+        doc: the SI unit of solid angle
+        symbol: {form: static, text: sr}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  # ------------------------------------------------ named SI derived units ---
+
+  - package: frequency
+    doc: |
+      Frequency: how often a periodic event repeats.
+
+      T⁻¹ is also the dimension of radioactivity, and a becquerel is not a
+      hertz. The tag is what keeps them apart (D6).
+    dimension: {time: -1}
+    quantity: frequency
+    units:
+      - id: hertz
+        go: Hertz
+        canonical: true
+        doc: one cycle per second
+        symbol: {form: si, text: Hz}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: activity
+    doc: |
+      Radioactivity: nuclear decays per second.
+
+      Same dimension as frequency, different quantity — the SI names both
+      because counting decays and counting cycles are not the same measurement.
+    dimension: {time: -1}
+    quantity: radioactivity
+    units:
+      - id: becquerel
+        go: Becquerel
+        canonical: true
+        doc: one nuclear decay per second
+        symbol: {form: si, text: Bq}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: curie
+        go: Curie
+        doc: 37 thousand million decays per second, the activity of a gram of radium
+        symbol: {form: static, text: Ci}
+        factor: {num: "37000000000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: force
+    doc: Force, mass times acceleration.
+    dimension: {length: 1, mass: 1, time: -2}
+    units:
+      - id: newton
+        go: Newton
+        canonical: true
+        doc: the SI unit of force, kg·m·s⁻²
+        symbol: {form: si, text: N}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: dyne
+        go: Dyne
+        doc: the CGS unit of force, a hundred-thousandth of a newton
+        symbol: {form: static, text: dyn}
+        factor: {num: "1", den: "100000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: pressure
+    doc: Pressure, force per area.
+    dimension: {length: -1, mass: 1, time: -2}
+    units:
+      - id: pascal
+        go: Pascal
+        canonical: true
+        doc: the SI unit of pressure, N·m⁻²
+        symbol: {form: si, text: Pa}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: bar
+        go: Bar
+        doc: exactly 100 kPa
+        symbol: {form: static, text: bar}
+        factor: {num: "100000"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: atmosphere
+        go: Atmosphere
+        doc: the standard atmosphere, 101325 Pa by definition
+        symbol: {form: static, text: atm}
+        factor: {num: "101325"}
+        source: NIST SP 811 (2008), Appendix B.8
+      - id: torr
+        go: Torr
+        doc: one 760th of the standard atmosphere
+        symbol: {form: static, text: Torr}
+        # Exact by definition: the standard atmosphere is 101325 Pa and the
+        # torr is one 760th of it. Pre-divided, this factor is 133.322368…,
+        # and 760 Torr stops being 101325 Pa (D4).
+        factor: {num: "101325", den: "760"}
+        source: NIST SP 811 (2008), Appendix B.8
+      - id: millimetre_of_mercury
+        go: MillimetreOfMercury
+        doc: the conventional millimetre of mercury, as used in blood pressure
+        symbol: {form: static, text: mmHg}
+        # Conventional, not the torr: defined from a conventional density of
+        # mercury and standard gravity, which makes it 133.322387415 Pa exactly
+        # and a hair off the torr.
+        factor: {num: "133.322387415"}
+        source: NIST SP 811 (2008), Appendix B.8
+      - id: millimetre_of_water
+        go: MillimetreOfWater
+        doc: the conventional millimetre of water, as used for draught and filter pressure
+        symbol: {form: static, text: mmH₂O}
+        factor: {num: "9.80665"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: energy
+    doc: |
+      Energy, work and heat.
+
+      L²MT⁻² is also the dimension of a torque, which the SI does not give a
+      name of its own: a newton metre of torque and a joule of energy are
+      written differently on purpose.
+    dimension: {length: 2, mass: 1, time: -2}
+    units:
+      - id: joule
+        go: Joule
+        canonical: true
+        doc: the SI unit of energy, N·m
+        symbol: {form: si, text: J}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: kilowatt_hour
+        go: KilowattHour
+        doc: a kilowatt for an hour, the unit an electricity meter counts in
+        symbol: {form: static, text: kWh}
+        factor: {num: "3600000"}
+        source: NIST SP 811 (2008), Appendix B.8
+      - id: calorie
+        go: Calorie
+        doc: the international table calorie, exactly 4.1868 J
+        symbol: {form: static, text: cal}
+        factor: {num: "4.1868"}
+        source: NIST SP 811 (2008), Appendix B.8
+      - id: electronvolt
+        go: Electronvolt
+        doc: the energy an electron gains across one volt
+        symbol: {form: si, text: eV}
+        # Exact since 2019: the elementary charge is a defining constant.
+        factor: {num: "1.602176634", den: "10000000000000000000"}
+        source: SI Brochure 9th ed., §4.1 Table 7
+      - id: erg
+        go: Erg
+        doc: the CGS unit of energy, a ten-millionth of a joule
+        symbol: {form: static, text: erg}
+        factor: {num: "1", den: "10000000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: power
+    doc: Power, energy per time.
+    dimension: {length: 2, mass: 1, time: -3}
+    units:
+      - id: watt
+        go: Watt
+        canonical: true
+        doc: the SI unit of power, J·s⁻¹
+        symbol: {form: si, text: W}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: charge
+    doc: Electric charge.
+    dimension: {time: 1, electric_current: 1}
+    units:
+      - id: coulomb
+        go: Coulomb
+        canonical: true
+        doc: the SI unit of electric charge, A·s
+        symbol: {form: si, text: C}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: voltage
+    doc: Electric potential difference.
+    dimension: {length: 2, mass: 1, time: -3, electric_current: -1}
+    units:
+      - id: volt
+        go: Volt
+        canonical: true
+        doc: the SI unit of electric potential difference, W·A⁻¹
+        symbol: {form: si, text: V}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: capacitance
+    doc: Capacitance, charge stored per volt.
+    dimension: {length: -2, mass: -1, time: 4, electric_current: 2}
+    units:
+      - id: farad
+        go: Farad
+        canonical: true
+        doc: the SI unit of capacitance, C·V⁻¹
+        symbol: {form: si, text: F}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: resistance
+    doc: Electric resistance.
+    dimension: {length: 2, mass: 1, time: -3, electric_current: -2}
+    units:
+      - id: ohm
+        go: Ohm
+        canonical: true
+        doc: the SI unit of electric resistance, V·A⁻¹
+        symbol: {form: si, text: "Ω"}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: conductance
+    doc: Electric conductance, the reciprocal of resistance.
+    dimension: {length: -2, mass: -1, time: 3, electric_current: 2}
+    units:
+      - id: siemens
+        go: Siemens
+        canonical: true
+        doc: the SI unit of electric conductance, A·V⁻¹
+        symbol: {form: si, text: S}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: magneticflux
+    doc: Magnetic flux.
+    dimension: {length: 2, mass: 1, time: -2, electric_current: -1}
+    units:
+      - id: weber
+        go: Weber
+        canonical: true
+        doc: the SI unit of magnetic flux, V·s
+        symbol: {form: si, text: Wb}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: maxwell
+        go: Maxwell
+        doc: the CGS unit of magnetic flux
+        symbol: {form: static, text: Mx}
+        factor: {num: "1", den: "100000000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: fluxdensity
+    doc: Magnetic flux density.
+    dimension: {mass: 1, time: -2, electric_current: -1}
+    units:
+      - id: tesla
+        go: Tesla
+        canonical: true
+        doc: the SI unit of magnetic flux density, Wb·m⁻²
+        symbol: {form: si, text: T}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: gauss
+        go: Gauss
+        doc: the CGS unit of magnetic flux density, a ten-thousandth of a tesla
+        symbol: {form: static, text: G}
+        factor: {num: "1", den: "10000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: inductance
+    doc: Inductance.
+    dimension: {length: 2, mass: 1, time: -2, electric_current: -2}
+    units:
+      - id: henry
+        go: Henry
+        canonical: true
+        doc: the SI unit of inductance, Wb·A⁻¹
+        symbol: {form: si, text: H}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: luminousflux
+    doc: |
+      Luminous flux: luminous intensity over a solid angle.
+
+      The steradian is dimensionless, so a lumen has the dimension of a candela
+      and the tag is what distinguishes them (D6).
+    dimension: {luminous_intensity: 1}
+    quantity: luminous flux
+    units:
+      - id: lumen
+        go: Lumen
+        canonical: true
+        doc: the SI unit of luminous flux, cd·sr
+        symbol: {form: si, text: lm}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: illuminance
+    doc: Illuminance, luminous flux per area.
+    dimension: {length: -2, luminous_intensity: 1}
+    units:
+      - id: lux
+        go: Lux
+        canonical: true
+        doc: the SI unit of illuminance, lm·m⁻²
+        symbol: {form: si, text: lx}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: absorbeddose
+    doc: |
+      Absorbed dose: energy deposited per mass of tissue.
+
+      Same dimension as dose equivalent, and deliberately a different quantity:
+      the gray measures what was deposited, the sievert what it does to a body.
+      Reporting one as the other is the mistake this tag exists to prevent.
+    dimension: {length: 2, time: -2}
+    quantity: absorbed dose
+    units:
+      - id: gray
+        go: Gray
+        canonical: true
+        doc: the SI unit of absorbed dose, J·kg⁻¹
+        symbol: {form: si, text: Gy}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  - package: dose
+    doc: |
+      Dose equivalent: absorbed dose weighted by the biological effect of the
+      radiation.
+    dimension: {length: 2, time: -2}
+    quantity: dose equivalent
+    units:
+      - id: sievert
+        go: Sievert
+        canonical: true
+        doc: the SI unit of dose equivalent, J·kg⁻¹
+        symbol: {form: si, text: Sv}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: rem
+        go: Rem
+        doc: the older unit of dose equivalent, a hundredth of a sievert
+        symbol: {form: static, text: rem}
+        factor: {num: "1", den: "100"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: catalytic
+    doc: Catalytic activity, substance converted per time.
+    dimension: {time: -1, amount_of_substance: 1}
+    units:
+      - id: katal
+        go: Katal
+        canonical: true
+        doc: the SI unit of catalytic activity, mol·s⁻¹
+        symbol: {form: si, text: kat}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+
+  # ------------------------------------------- coherent derived quantities ---
+
+  - package: area
+    doc: Area, length squared.
+    dimension: {length: 2}
+    units:
+      - id: square_metre
+        go: SquareMetre
+        canonical: true
+        doc: the SI unit of area
+        symbol: {form: si_pow, text: m, power: 2}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: are
+        go: Are
+        doc: a hundred square metres
+        symbol: {form: static, text: a}
+        factor: {num: "100"}
+        source: NIST SP 811 (2008), Appendix B.8
+      - id: hectare
+        go: Hectare
+        doc: ten thousand square metres
+        symbol: {form: static, text: ha}
+        factor: {num: "10000"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: barn
+        go: Barn
+        doc: the nuclear cross-section unit, 10⁻²⁸ m²
+        symbol: {form: static, text: b}
+        factor: {num: "1", den: "10000000000000000000000000000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: volume
+    doc: Volume, length cubed.
+    dimension: {length: 3}
+    units:
+      - id: cubic_metre
+        go: CubicMetre
+        canonical: true
+        doc: the SI unit of volume
+        symbol: {form: si_pow, text: m, power: 3}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: litre
+        go: Litre
+        doc: a thousandth of a cubic metre
+        symbol: {form: litre}
+        factor: {num: "1", den: "1000"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+
+  - package: velocity
+    doc: Velocity, length per time.
+    dimension: {length: 1, time: -1}
+    units:
+      - id: metre_per_second
+        go: MetrePerSecond
+        canonical: true
+        doc: the SI unit of velocity
+        symbol: {form: quotient, of: [{form: si, text: m}, {form: si, text: s}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: kilometre_per_hour
+        go: KilometrePerHour
+        doc: a kilometre in an hour
+        symbol: {form: static, text: km/h}
+        factor: {num: "1", den: "3.6"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: acceleration
+    doc: Acceleration, velocity per time.
+    dimension: {length: 1, time: -2}
+    units:
+      - id: metre_per_second_squared
+        go: MetrePerSecondSquared
+        canonical: true
+        doc: the SI unit of acceleration
+        symbol: {form: quotient, of: [{form: si, text: m}, {form: si_pow, text: s, power: 2}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+
+  - package: density
+    doc: Mass density, mass per volume.
+    dimension: {length: -3, mass: 1}
+    units:
+      - id: kilogram_per_cubic_metre
+        go: KilogramPerCubicMetre
+        canonical: true
+        doc: the SI unit of mass density
+        symbol: {form: quotient, of: [{form: gram}, {form: si_pow, text: m, power: 3}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: gram_per_litre
+        go: GramPerLitre
+        doc: a gram in a litre, which is also a kilogram in a cubic metre
+        symbol: {form: static, text: g/L}
+        source: NIST SP 811 (2008), Appendix B.9
+
+  - package: concentration
+    doc: Amount-of-substance concentration.
+    dimension: {length: -3, amount_of_substance: 1}
+    units:
+      - id: mole_per_cubic_metre
+        go: MolePerCubicMetre
+        canonical: true
+        doc: the SI unit of concentration
+        symbol: {form: quotient, of: [{form: si, text: mol}, {form: si_pow, text: m, power: 3}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: mole_per_litre
+        go: MolePerLitre
+        doc: the molar, a mole in a litre
+        symbol: {form: static, text: mol/L}
+        factor: {num: "1000"}
+        source: NIST SP 811 (2008), Appendix B.9
+
+  - package: volumeflow
+    doc: Volume flow rate, the quantity a flow meter reads.
+    dimension: {length: 3, time: -1}
+    units:
+      - id: cubic_metre_per_second
+        go: CubicMetrePerSecond
+        canonical: true
+        doc: the SI unit of volume flow rate
+        symbol: {form: quotient, of: [{form: si_pow, text: m, power: 3}, {form: si, text: s}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: cubic_metre_per_hour
+        go: CubicMetrePerHour
+        doc: the unit most industrial flow meters are scaled in
+        symbol: {form: static, text: "m³/h"}
+        factor: {num: "1", den: "3600"}
+        source: NIST SP 811 (2008), Appendix B.9
+      - id: litre_per_minute
+        go: LitrePerMinute
+        doc: the unit small flow meters are scaled in
+        symbol: {form: static, text: L/min}
+        factor: {num: "1", den: "60000"}
+        source: NIST SP 811 (2008), Appendix B.9
+
+  - package: massflow
+    doc: Mass flow rate.
+    dimension: {mass: 1, time: -1}
+    units:
+      - id: kilogram_per_second
+        go: KilogramPerSecond
+        canonical: true
+        doc: the SI unit of mass flow rate
+        symbol: {form: quotient, of: [{form: gram}, {form: si, text: s}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: kilogram_per_hour
+        go: KilogramPerHour
+        doc: mass flow as a plant reads it
+        symbol: {form: static, text: kg/h}
+        factor: {num: "1", den: "3600"}
+        source: NIST SP 811 (2008), Appendix B.9
+
+  - package: viscosity
+    doc: Dynamic viscosity, the resistance of a fluid to shear.
+    dimension: {length: -1, mass: 1, time: -1}
+    units:
+      - id: pascal_second
+        go: PascalSecond
+        canonical: true
+        doc: the SI unit of dynamic viscosity
+        symbol: {form: product, of: [{form: si, text: Pa}, {form: si, text: s}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: poise
+        go: Poise
+        doc: the CGS unit of dynamic viscosity, a tenth of a pascal second
+        symbol: {form: static, text: P}
+        factor: {num: "1", den: "10"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: kinematicviscosity
+    doc: |
+      Kinematic viscosity: dynamic viscosity over density.
+
+      L²T⁻¹ is also the dimension of thermal diffusivity and of a diffusion
+      coefficient. Those are not in the catalogue, because they would print the
+      same symbol — m²/s — and the text form of D12 has to read back to one
+      unit. See section 8 of CONCEPT.md.
+    dimension: {length: 2, time: -1}
+    quantity: kinematic viscosity
+    units:
+      - id: square_metre_per_second
+        go: SquareMetrePerSecond
+        canonical: true
+        doc: the SI unit of kinematic viscosity
+        symbol: {form: quotient, of: [{form: si_pow, text: m, power: 2}, {form: si, text: s}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: stokes
+        go: Stokes
+        doc: the CGS unit of kinematic viscosity
+        symbol: {form: static, text: St}
+        factor: {num: "1", den: "10000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: surfacetension
+    doc: Surface tension, force per length of contact line.
+    dimension: {mass: 1, time: -2}
+    units:
+      - id: newton_per_metre
+        go: NewtonPerMetre
+        canonical: true
+        doc: the SI unit of surface tension
+        symbol: {form: quotient, of: [{form: si, text: N}, {form: si, text: m}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+
+  - package: specificheat
+    doc: Specific heat capacity, heat per mass and temperature difference.
+    dimension: {length: 2, time: -2, temperature: -1}
+    units:
+      - id: joule_per_kilogram_kelvin
+        go: JoulePerKilogramKelvin
+        canonical: true
+        doc: the SI unit of specific heat capacity
+        symbol:
+          form: quotient
+          of:
+            - {form: si, text: J}
+            - {form: product, of: [{form: gram}, {form: si, text: K}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+
+  - package: thermalconductivity
+    doc: Thermal conductivity, heat flow per length and temperature difference.
+    dimension: {length: 1, mass: 1, time: -3, temperature: -1}
+    units:
+      - id: watt_per_metre_kelvin
+        go: WattPerMetreKelvin
+        canonical: true
+        doc: the SI unit of thermal conductivity
+        symbol:
+          form: quotient
+          of:
+            - {form: si, text: W}
+            - {form: product, of: [{form: si, text: m}, {form: si, text: K}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3

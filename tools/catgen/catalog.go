@@ -20,6 +20,13 @@ type quantity struct {
 	Doc       string     `yaml:"doc"`
 	Dimension exponents  `yaml:"dimension"`
 	Units     []unitSpec `yaml:"units"`
+
+	// Quantity names what these units measure, where the dimension is shared
+	// by more than one quantity: frequency and radioactivity are both T⁻¹.
+	// Empty where the dimension belongs to one quantity only, which is the
+	// common case. It sits on the group because every unit of a package
+	// measures the same thing — that is what makes it a package.
+	Quantity string `yaml:"quantity"`
 }
 
 // exponents is the dimension of a quantity, one field per SI base quantity.
@@ -70,6 +77,9 @@ type symbolSpec struct {
 
 // qualified is the Go expression referring to a unit from outside its package.
 func (u unitSpec) qualified() string { return u.quantity.Package + "." + u.Go }
+
+// quantityTag is the quantity every unit of this package measures.
+func (u unitSpec) quantityTag() string { return u.quantity.Quantity }
 
 // kindExpr is the metrology.Kind the generated definition carries.
 func (u unitSpec) kindExpr() string {
@@ -148,7 +158,11 @@ func (s symbolSpec) symbolExpr() (string, error) {
 func (s symbolSpec) text() string {
 	switch s.Form {
 	case "gram":
+		// The kilogram names itself with its prefix; the symbol package prints
+		// kg for the unit and attaches prefixes to the gram.
 		return "kg"
+	case "litre":
+		return "L"
 	case "si_pow":
 		return s.Text + superscript(s.Power)
 	case "product":
