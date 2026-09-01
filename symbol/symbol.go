@@ -79,8 +79,21 @@ func Litre() Symbol {
 //
 // A prefix attaches to the first multiplicand only, because a prefix on each
 // factor would multiply: k(N·m) is kN·m, never kN·km.
+//
+// A product of a product is flattened into one. Multiplication is associative
+// and the rendering is flat either way, so keeping the nesting would leave two
+// structures for one symbol — and [Symbol.Equal], which promises that two
+// symbols rendering alike are alike, would have to answer false for them.
 func Product(multiplicands ...Symbol) Symbol {
-	return Symbol{form: formProduct, parts: append([]Symbol(nil), multiplicands...)}
+	parts := make([]Symbol, 0, len(multiplicands))
+	for _, m := range multiplicands {
+		if m.form == formProduct {
+			parts = append(parts, m.parts...)
+			continue
+		}
+		parts = append(parts, m)
+	}
+	return Symbol{form: formProduct, parts: parts}
 }
 
 // Quotient returns the symbol of a quotient, rendered m/s. A prefix attaches to
@@ -123,14 +136,30 @@ func (s Symbol) partStrings() []string {
 	return out
 }
 
-// denominatorString parenthesises a product denominator, so that J/(kg·K) is
-// not read as (J/kg)·K.
+// denominatorString parenthesises a denominator that joins more than one unit,
+// so that J/(kg·K) is not read as (J/kg)·K, m/(s/A) not as (m/s)/A, and b/(km/h)
+// not as (b/km)/h.
+//
+// In each case both readings are plausible: a solidus and a middle dot bind
+// equally and from the left, which is how the text form of D12 is read back.
+// Without the brackets the two would be the same string and one of them would
+// come back as a different dimension.
+//
+// The test is on the rendered text rather than on the form, because a symbol
+// that joins two units need not be a product or a quotient: km/h is a static
+// symbol and still has to be bracketed. An exponent does not count — m² binds
+// to its own symbol and J/m² is unambiguous.
 func (s Symbol) denominatorString() string {
-	den := s.parts[1]
-	if den.form == formProduct {
-		return "(" + den.String() + ")"
+	den := s.parts[1].String()
+	if composite(den) {
+		return "(" + den + ")"
 	}
-	return den.String()
+	return den
+}
+
+// composite reports whether a rendered symbol joins more than one unit.
+func composite(text string) bool {
+	return strings.ContainsAny(text, "·/()")
 }
 
 // Equal reports whether two symbols render identically in every magnitude.

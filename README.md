@@ -8,11 +8,11 @@ dimensional analysis, and one package per quantity so that autocompletion double
 as a catalogue.
 
 > **Status: under construction.** The architecture is settled and written down in
-> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M4. The code below
-> runs, and the catalogue holds the SI — seven base units, twenty-two named
-> derived units, and the non-SI units of NIST SP 811 that process engineering
-> uses. Still missing: the text form and its parser. The API will change without
-> notice until `v1.0.0`.
+> [CONCEPT.md](CONCEPT.md); the implementation is at milestone M5. The code below
+> runs, the catalogue holds the SI — seven base units, twenty-two named derived
+> units, and the non-SI units of NIST SP 811 that process engineering uses — and
+> the text form reads and writes. Still missing: `unitvet`, the static dimension
+> checker. The API will change without notice until `v1.0.0`.
 
 ```go
 p := pressure.Bar.Of(2.5)
@@ -87,10 +87,49 @@ configuration file, or a computed dimension that needs a unit to be expressed
 in — the `catalog` package indexes the same data:
 
 ```go
-q, _ := force.Newton.Of(100).Div(area.SquareMetre.Of(2))  // 50 N/m²
-unit, _ := catalog.Canonical(q.Dimension(), q.Kind())     // Pa
-named, _ := q.To(unit)                                    // 50 Pa
+q, _ := force.Newton.Of(100).Div(area.SquareMetre.Of(2))            // 50 N/m²
+unit, _ := catalog.Canonical(q.Dimension(), q.Kind(), q.Quantity()) // Pa
+named, _ := q.To(unit)                                              // 50 Pa
 ```
+
+## Text is the exchange format
+
+A measurement writes itself as `"2.5 bar"` — the magnitude with every digit it
+carries, and the unit it is held in. That is the whole serialisation format:
+`MarshalText`, `MarshalJSON` and `driver.Valuer` on the measurement itself.
+
+Reading it back needs a catalogue, because `bar` is a unit only because
+something says so — and the library has no global registry to keep one in. A
+parser is therefore a value holding the units it knows:
+
+```go
+m, _ := parse.Measurement("250 kPa")     // prefixes are read off the symbol
+p, _ := parse.Measurement("50 N/m²")     // and expressions out of the operators
+u, _ := parse.Unit("J/(kg·K)")
+
+mine := parse.New(myUnits)               // your own units, same code
+m2, _ := mine.Measurement("2.5 wdg")
+```
+
+Go's decoding interfaces — `encoding.TextUnmarshaler`, `json.Unmarshaler`,
+`sql.Scanner` — are handed no context to resolve a symbol with, so the
+destination carries the parser instead:
+
+```go
+var config struct {
+    Setpoint   parse.Text `json:"setpoint"`   // "20 °C"
+    Hysteresis parse.Text `json:"hysteresis"` // "2 K"
+}
+_ = json.Unmarshal(data, &config)
+upper, _ := config.Setpoint.Add(config.Hysteresis.Measurement) // 22 °C
+
+column := parse.Text{}.In(pressure.Bar)   // a NUMERIC column, unit in the schema
+_ = row.Scan(&column)
+```
+
+Everything the library prints, it reads back — as the same unit, the same kind
+and the same digits, across the whole catalogue. The parser is fuzzed against
+that property.
 
 ## Requirements
 

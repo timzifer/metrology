@@ -53,9 +53,10 @@ func Canonical(dim dimension.Dimension, kind metrology.Kind, quantity metrology.
 
 // BySymbol returns the unit that prints as text, if the catalogue has one.
 //
-// The lookup is exact and unprefixed: "Pa" resolves, "kPa" does not. Reading a
-// prefixed symbol is the parser's job (M5), which needs to take the prefix off
-// the magnitude as well as off the symbol.
+// The lookup is exact and unprefixed: "Pa" resolves, "kPa" does not. A prefixed
+// symbol, an expression such as "J/(kg·K)", and a whole measurement are read by
+// github.com/timzifer/metrology/parse, which indexes this catalogue along with
+// every spelling each symbol admits.
 func BySymbol(text string, kind metrology.Kind) (metrology.Unit, bool) {
 	u, ok := bySymbol[symbolKey{text: text, kind: kind}]
 	return u, ok

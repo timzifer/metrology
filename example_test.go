@@ -1,6 +1,7 @@
 package metrology_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -102,4 +103,31 @@ func ExampleMeasurement_Prefixed() {
 	// Output:
 	// 250000 Pa
 	// 250 kPa
+}
+
+func ExampleMeasurement_MarshalText() {
+	// The canonical form of D12: the magnitude with the unit it is held in,
+	// and every digit the measurement carries.
+	m, err := Bar.OfString("2.500000000000000000000000000001")
+	if err != nil {
+		panic(err)
+	}
+	text, err := m.MarshalText()
+	fmt.Println(string(text), err)
+	// Output: 2.500000000000000000000000000001 bar <nil>
+}
+
+func ExampleMeasurement_MarshalJSON() {
+	// A measurement travels as a string, not as {"value": 2.5, "unit": "bar"}:
+	// an object with a number in it puts every consumer back on float64 and
+	// loses exactly what this library keeps.
+	//
+	// Reading the form back needs a catalogue of units, which the core does
+	// not have (D7) — that is what the parse package is for.
+	data, err := json.Marshal(struct {
+		Inlet   metrology.Measurement `json:"inlet"`
+		Ambient metrology.Measurement `json:"ambient"`
+	}{Inlet: Bar.Of(2.5), Ambient: Celsius.Of(20)})
+	fmt.Println(string(data), err)
+	// Output: {"inlet":"2.5 bar","ambient":"20 °C"} <nil>
 }

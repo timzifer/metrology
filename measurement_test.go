@@ -264,3 +264,64 @@ func TestDecimalRoundTrip(t *testing.T) {
 		t.Error("the decimal changed on the way out")
 	}
 }
+
+// OfString takes the shape of a number seriously, because apd does not: it
+// accepts ".-1" and yields a decimal that prints as "0.-1", and a value whose
+// own text form is not a value would break the round trip D12 rests on.
+func TestOfStringRejectsWhatIsNotANumber(t *testing.T) {
+	for _, s := range []string{"", ".-1", "bar", "1.2.3", "2.5 bar", "--1", "1,5", "0x10"} {
+		m, err := Bar.OfString(s)
+		if err == nil {
+			t.Errorf("OfString(%q) = %q, want an error", s, m)
+			continue
+		}
+		if !errors.Is(err, metrology.ErrSyntax) {
+			t.Errorf("OfString(%q) error = %v, want ErrSyntax", s, err)
+		}
+	}
+}
+
+// What it does accept is everything the library can print, the two magnitudes
+// that are not numbers included.
+func TestOfStringAcceptsWhatItPrints(t *testing.T) {
+	for _, s := range []string{"2.5", "-40", ".5", "1e3", "NaN", "Infinity", "-Infinity"} {
+		m, err := Bar.OfString(s)
+		if err != nil {
+			t.Errorf("OfString(%q): %v", s, err)
+			continue
+		}
+		if _, err := Bar.OfString(m.Decimal().Text('f')); err != nil {
+			t.Errorf("OfString(%q) printed as %q, which does not read back: %v", s, m, err)
+		}
+	}
+}
+
+// An exponent apd cannot hold is rejected by apd itself, and the error says so
+// rather than being swallowed into a shape complaint.
+func TestOfStringExponentRange(t *testing.T) {
+	if _, err := Bar.OfString("1e200000"); !errors.Is(err, metrology.ErrSyntax) {
+		t.Errorf("error = %v, want ErrSyntax", err)
+	}
+}
+
+// A zero carries no order of magnitude, and apd prints one with a positive
+// exponent by expanding it into digits: 0E+1 comes out as "00", which reads
+// back as "0" and breaks the fixpoint the text form of D12 promises. Found by
+// the parser's fuzz test.
+func TestZeroPrintsAsOneZero(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"0E1", "0 bar"},
+		{"0E100", "0 bar"},
+		{"-0E2", "-0 bar"},
+		{"0", "0 bar"},
+		{"0.00", "0.00 bar"}, // digits behind the point are the caller's
+	} {
+		m, err := Bar.OfString(tc.in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := m.String(); got != tc.want {
+			t.Errorf("OfString(%q) prints as %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

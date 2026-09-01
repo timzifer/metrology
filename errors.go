@@ -49,6 +49,10 @@ var (
 	ErrRange = errors.New("value out of range for the target type")
 )
 
+// errNotDecimal is what a [SyntaxError] wraps where the text has the wrong
+// shape rather than a shape apd rejected for a reason of its own.
+var errNotDecimal = errors.New("not a decimal number")
+
 // DimensionError names both dimensions of a failed operation.
 //
 // D11: at runtime this message replaces a compile error, so it has to carry

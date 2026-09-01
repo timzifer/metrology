@@ -3,6 +3,7 @@ package metrology
 import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/timzifer/metrology/dimension"
+	"github.com/timzifer/metrology/internal/decimaltext"
 )
 
 // Measurement is a magnitude on a scale: a decimal paired with a [Unit].
@@ -39,8 +40,17 @@ func (u Unit) Of[N Numeric](v N) Measurement {
 // OfString returns a measurement of the magnitude written in s.
 //
 // This is the exact path: the digits in s are the digits stored, with no float64
-// in between.
+// in between. Accepted is what the text form of D12 writes — an optional sign,
+// digits with at most one decimal point among them, an exponent after e or E,
+// and the words NaN and Infinity.
+//
+// The shape is checked here rather than left to apd, which accepts ".-1" and
+// yields a decimal that prints as "0.-1" — a value whose own text form is not a
+// value, which a canonical text form must not be able to hold.
 func (u Unit) OfString(s string) (Measurement, error) {
+	if !decimaltext.Valid(s) {
+		return Measurement{}, &SyntaxError{Op: "OfString", Input: s, Err: errNotDecimal}
+	}
 	d, _, err := apd.NewFromString(s)
 	if err != nil {
 		return Measurement{}, &SyntaxError{Op: "OfString", Input: s, Err: err}
@@ -53,6 +63,14 @@ func (u Unit) OfString(s string) (Measurement, error) {
 func (u Unit) measurement(d *apd.Decimal) Measurement {
 	m := Measurement{unit: u}
 	m.val.Set(d)
+	// A zero with a positive exponent prints as "00": the fixed-point form
+	// expands the exponent into digits, and for a zero coefficient those
+	// digits are zeros. It is the same zero written twice and only one of the
+	// two forms reads back as itself, so the canonical one is stored (D12).
+	// Digits behind the point are left alone — 0.00 is what the caller wrote.
+	if m.val.Form == apd.Finite && m.val.Coeff.Sign() == 0 && m.val.Exponent > 0 {
+		m.val.Exponent = 0
+	}
 	return m
 }
 
