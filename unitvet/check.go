@@ -10,6 +10,10 @@ import (
 func (c *checker) check(fn *ssa.Function) {
 	for _, block := range fn.Blocks {
 		for _, instr := range block.Instrs {
+			if store, isStore := instr.(*ssa.Store); isStore {
+				c.checkAssignment(store)
+				continue
+			}
 			call, isCall := instr.(*ssa.Call)
 			if !isCall {
 				continue
@@ -30,6 +34,32 @@ func (c *checker) check(fn *ssa.Function) {
 			}
 		}
 	}
+}
+
+// checkAssignment reports an assignment to a unit of the generated catalogue.
+//
+// The resolver trusts such a variable by name (D13): pressure.Bar is the bar
+// because the table says the path and the name are, and a write anywhere in the
+// program makes that untrue. The variable is exported and Go lets an importer
+// assign to it, so the assumption is worth one rule rather than a comment — a
+// checker that silently proves the wrong thing is worse than one that proves
+// nothing.
+//
+// Only a direct store is reported. A write through a pointer taken elsewhere is
+// out of reach, and silence on doubt is the governing rule.
+func (c *checker) checkAssignment(store *ssa.Store) {
+	g, isGlobal := store.Addr.(*ssa.Global)
+	if !isGlobal {
+		return
+	}
+	name := g.Pkg.Pkg.Path() + "." + g.Name()
+	if _, found := catalogue[name]; !found {
+		// A variable of the program's own is its own business; the resolver
+		// never trusted it in the first place.
+		return
+	}
+	c.report(store.Pos(), "%s.%s is assigned; the generated table no longer describes it, and every unit resolved through it is unproven",
+		g.Pkg.Pkg.Name(), g.Name())
 }
 
 // checkAdditive reports a sum, a difference or a comparison the run time would

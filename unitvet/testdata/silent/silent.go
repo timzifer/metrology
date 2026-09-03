@@ -217,3 +217,10 @@ func aProductOfTwoTagsHasNoProvenance() {
 	_, _ = product.To(angle.Radian)
 	_, _ = product.To(solidangle.Steradian)
 }
+
+// A variable of the program's own is its own business: the resolver never
+// trusted it, so writing to it takes nothing away.
+func assigningAVariableOfOnesOwn() {
+	hand = length.Metre
+	table["m"] = pressure.Bar
+}

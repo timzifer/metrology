@@ -6,6 +6,7 @@ import (
 	"github.com/timzifer/metrology"
 	"github.com/timzifer/metrology/activity"
 	"github.com/timzifer/metrology/area"
+	"github.com/timzifer/metrology/dose"
 	"github.com/timzifer/metrology/duration"
 	"github.com/timzifer/metrology/force"
 	"github.com/timzifer/metrology/frequency"
@@ -229,4 +230,11 @@ func aDroppedTagSurvivesASum() {
 	scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
 	sum, _ := scaled.Add(scaled)
 	_, _ = sum.To(frequency.Hertz) // want `To on incompatible quantities: a magnitude computed from radioactivity and frequency; Mul and Div drop the tag \(D6\), so the run time no longer sees the conflict`
+}
+
+// A catalogue unit is a package-level variable, and Go lets an importer assign
+// to it. The resolver trusts it by name, so the write is what makes the table
+// untrue — reported where it happens, not at the uses it invalidates.
+func assigningACatalogueUnit() {
+	dose.Sievert = length.Metre // want `dose.Sievert is assigned; the generated table no longer describes it, and every unit resolved through it is unproven`
 }

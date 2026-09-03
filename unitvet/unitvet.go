@@ -32,6 +32,23 @@
 // same source the library itself is generated from (D8), so the checker and
 // the run time cannot drift apart.
 //
+// # A catalogue unit that is assigned
+//
+// A unit is a package-level variable — pressure.Bar, dose.Sievert — and this
+// pass resolves one by name, from the table generated alongside the catalogue.
+// Go lets an importer assign to an exported variable of another package, and a
+// program that does makes the table untrue: the name still resolves, to a unit
+// the variable no longer holds.
+//
+// The assumption is checked rather than assumed. A direct store to a catalogue
+// unit is reported where it happens:
+//
+//	app/app.go:9:2: dose.Sievert is assigned; the generated table no longer
+//	                describes it, and every unit resolved through it is unproven
+//
+// A write through a pointer taken elsewhere is out of reach, as is one in a
+// dependency the vet run does not cover.
+//
 // # The tag a product dropped
 //
 // One rule reports something the run time accepts, and it is the only one

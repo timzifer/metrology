@@ -625,6 +625,8 @@ columns are asserted:
 | unit chosen at runtime (`if x { u = Bar }`) | silent — SSA φ-node, not provable |
 | operand arriving as a function parameter | silent — unknown origin |
 | a unit from the caller's own catalogue | silent — not in the generated table |
+| `dose.Sievert = length.Metre` | reported — the write is what makes the table untrue |
+| a write to a variable of the program's own | silent — the resolver never trusted it |
 | a unit held in a map, a slice or a struct field | silent |
 | `25 °C − 20 °C`, then the result used | silent — the interval unit is not in the table |
 | a method value, `add := m.Add` | silent — the receiver is bound out of sight |
@@ -645,12 +647,24 @@ left to see and which says so in its own message. What is *not* checked
 is a declared result unit for `Div`: the quotient carries the unit its operands
 gave it and is named in a separate, checked step.
 
-**Five resolution rules that are easy to get wrong.**
+**Six resolution rules that are easy to get wrong.**
 
 - **A unit is trusted only where the catalogue names it.** The resolver reads a
   package-level variable when — and only when — the generated table has it, which
   is what keeps the pass from assuming a variable it does not know is never
   written to. A program with a catalogue of its own is silent rather than wrong.
+- **The trust that remains is checked, not assumed.** A catalogue unit is an
+  exported package-level variable, and Go lets an importer assign to it (D7 keeps
+  these variables deliberately: a function would rebuild its decimals on every
+  call, and `pressure.Bar` is how callers write it). Resolving one by name
+  therefore assumes nobody writes to it — so a direct store to a catalogue unit
+  is itself reported, at the write rather than at the uses it invalidates. What
+  it costs the program is small and local: the catalogue's own maps hold copies
+  taken at init, so `catalog.BySymbol("Sv")` still answers with the sievert while
+  the variable no longer does. What it costs this pass is the whole proof, which
+  is why the rule is here and not in a comment. A write through a pointer taken
+  elsewhere, or one inside a dependency the vet run does not cover, stays out of
+  reach.
 - **A forbidden operation has no result.** `Add` on two absolute magnitudes
   returns the zero `Measurement`, so the walk stops there rather than propagating
   the scale it would have had. One mistake reports once; without this a single

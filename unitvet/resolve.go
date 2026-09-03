@@ -32,7 +32,12 @@ func (c *checker) resolveValue(v ssa.Value) (scale, bool) {
 		// A package-level unit is read through its address: pressure.Bar is a
 		// load of a global. Only a unit in the generated table is trusted, so
 		// a global of somebody else's that happens to hold a unit stays
-		// unknown — nothing here assumes a variable is never written to.
+		// unknown.
+		//
+		// For a catalogue unit the trust is by name, which does assume nobody
+		// assigns to the variable — Go lets an importer do exactly that. The
+		// assumption is not left implicit: checkAssignment reports the write
+		// that would make this table untrue.
 		if v.Op == token.MUL {
 			if g, isGlobal := v.X.(*ssa.Global); isGlobal {
 				s, found := catalogue[g.Pkg.Pkg.Path()+"."+g.Name()]

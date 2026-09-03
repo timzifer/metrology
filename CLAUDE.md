@@ -195,6 +195,11 @@ error branch that cannot fire usually means the error cannot occur.
   becquerel scaled by a number still converts into a curie silently — and it
   dies with the dimension. Do not "fix" this by putting the tag back into
   `Mul`/`Div`; that is the guessing D6 forbids.
+- A catalogue unit is an exported `var` and an importer can assign to it. That
+  is not an oversight (D7), and `unitvet` reports the write: it resolves such a
+  variable by name, so a store to one is what makes its table untrue. Do not
+  turn the catalogue into accessor functions to close this — D13 records what
+  the write actually costs, and it is not the shape of the API.
 - `unitvet` stays silent on cases it cannot prove (D13). That is the design: a
   dimension checker with false positives gets switched off and then catches
   nothing at all. Do not make it "smarter" by guessing. In particular it trusts
