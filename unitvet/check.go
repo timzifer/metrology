@@ -35,6 +35,10 @@ func (c *checker) check(fn *ssa.Function) {
 // checkAdditive reports a sum, a difference or a comparison the run time would
 // refuse, in the order the run time refuses it: the dimension first, because
 // it is the coarser mistake, then the quantity, then the kind.
+//
+// The one rule that outlives the run time sits between the second and the
+// third: a tag a product dropped still conflicts, and the run time has no way
+// left to see it (D16).
 func (c *checker) checkAdditive(call *ssa.Call, op string) {
 	left, right, known := c.operands(call.Common())
 	if !known {
@@ -45,6 +49,8 @@ func (c *checker) checkAdditive(call *ssa.Call, op string) {
 		c.report(call.Pos(), "%s on incompatible dimensions: %s and %s", op, left.dim, right.dim)
 	case !compatible(left.quantity, right.quantity):
 		c.report(call.Pos(), "%s on incompatible quantities: %s and %s", op, left.quantity, right.quantity)
+	case !compatible(effective(left), effective(right)):
+		c.report(call.Pos(), "%s on incompatible quantities: %s and %s; %s", op, describe(left), describe(right), tagWasDropped)
 	default:
 		if why, forbidden := affineRule(op, left.kind, right.kind); forbidden {
 			c.report(call.Pos(), "%s on incompatible kinds: %s and %s; %s", op, left.kind, right.kind, why)
@@ -101,7 +107,23 @@ func (c *checker) checkConversion(call *ssa.Call, op string) {
 			op, from.kind, to.kind)
 	case !compatible(from.quantity, to.quantity):
 		c.report(call.Pos(), "%s on incompatible quantities: %s and %s", op, from.quantity, to.quantity)
+	case !compatible(effective(from), effective(to)):
+		c.report(call.Pos(), "%s on incompatible quantities: %s and %s; %s", op, describe(from), describe(to), tagWasDropped)
 	}
+}
+
+// tagWasDropped closes the one diagnostic that predicts no run-time error. It
+// says so, because a reader who runs the code and sees it pass would otherwise
+// conclude the checker is wrong (D16).
+const tagWasDropped = "Mul and Div drop the tag (D6), so the run time no longer sees the conflict"
+
+// describe names the quantity a scale speaks for, saying where the tag is
+// provenance rather than a claim the value still makes.
+func describe(s scale) string {
+	if s.quantity != "" {
+		return string(s.quantity)
+	}
+	return "a magnitude computed from " + string(s.dropped)
 }
 
 // checkPower reports a power of a point on a scale. It stands apart from the

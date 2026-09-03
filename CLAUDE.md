@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D15 and referenced
+more importantly, the reasoning — decisions are numbered D1 … D16 and referenced
 from code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
 `CONCEPT.md` and the code is the failure mode to avoid.
@@ -178,6 +178,13 @@ error branch that cannot fire usually means the error cannot occur.
   conditions: an integer and never a float, because the shortcut has to compute
   what the slow path computes; a tagged struct field and never an interface
   member, which allocates per value; and no generics, which it does not need.
+- `unitvet` reports exactly one thing the run time accepts, and it is on
+  purpose (D16): a quantity tag that a `Mul` or a `Div` dropped while leaving
+  the dimension intact still conflicts, and the run time has no tag left to
+  check. The message says so in its own text. The provenance is not a tag — a
+  becquerel scaled by a number still converts into a curie silently — and it
+  dies with the dimension. Do not "fix" this by putting the tag back into
+  `Mul`/`Div`; that is the guessing D6 forbids.
 - `unitvet` stays silent on cases it cannot prove (D13). That is the design: a
   dimension checker with false positives gets switched off and then catches
   nothing at all. Do not make it "smarter" by guessing. In particular it trusts

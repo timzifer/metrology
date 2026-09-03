@@ -11,9 +11,11 @@ import (
 	"errors"
 
 	"github.com/timzifer/metrology"
+	"github.com/timzifer/metrology/activity"
 	"github.com/timzifer/metrology/frequency"
 	"github.com/timzifer/metrology/length"
 	"github.com/timzifer/metrology/pressure"
+	"github.com/timzifer/metrology/ratio"
 	"github.com/timzifer/metrology/temperature"
 )
 
@@ -28,6 +30,14 @@ func Inlet() metrology.Measurement { return pressure.Bar.Of(2.5) } // want Inlet
 
 // Mains is the frequency of the supply.
 func Mains() metrology.Measurement { return frequency.Hertz.Of(50) } // want Mains:"returns T⁻¹ interval frequency"
+
+// Decay is a radioactivity scaled by a plain number. The product drops the tag
+// (D6), so what the fact carries is the provenance the checker keeps (D16) —
+// and it crosses the package boundary with it.
+func Decay() metrology.Measurement { // want Decay:"returns T⁻¹ interval from radioactivity"
+	scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
+	return scaled
+}
 
 // Scale is the unit lengths are reported on.
 func Scale() metrology.Unit { return length.Metre } // want Scale:"returns L¹ interval"

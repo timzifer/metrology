@@ -163,7 +163,8 @@ func (c *checker) composed(name string, call *ssa.CallCommon) (scale, bool) {
 		if n < -metrology.MaxPower || n > metrology.MaxPower {
 			return scale{}, false
 		}
-		return scale{dim: left.dim.Pow(dimension.Exponent(n))}, true
+		dim := left.dim.Pow(dimension.Exponent(n))
+		return scale{dim: dim, dropped: dropTag(dim, left, scale{})}, true
 	}
 
 	right, known := c.resolve(call.Args[1])
@@ -171,9 +172,11 @@ func (c *checker) composed(name string, call *ssa.CallCommon) (scale, bool) {
 		return scale{}, false
 	}
 	if name == "Times" {
-		return scale{dim: dimension.Product(left.dim, right.dim)}, true
+		dim := dimension.Product(left.dim, right.dim)
+		return scale{dim: dim, dropped: dropTag(dim, left, right)}, true
 	}
-	return scale{dim: dimension.Quotient(left.dim, right.dim)}, true
+	dim := dimension.Quotient(left.dim, right.dim)
+	return scale{dim: dim, dropped: dropTag(dim, left, right)}, true
 }
 
 // combined reports the scale of a sum or a difference.
@@ -191,14 +194,17 @@ func (c *checker) combined(name string, call *ssa.CallCommon) (scale, bool) {
 	if quantity == "" {
 		quantity = right.quantity
 	}
+	// A sum neither drops a tag nor restores one, so whatever provenance the
+	// operands carried travels with it (D16).
+	dropped := dropTag(left.dim, left, right)
 	if name == "Add" {
 		if left.kind == metrology.Absolute && right.kind == metrology.Absolute {
 			return scale{}, false
 		}
 		if left.kind == metrology.Absolute || right.kind == metrology.Absolute {
-			return scale{dim: left.dim, kind: metrology.Absolute, quantity: quantity}, true
+			return scale{dim: left.dim, kind: metrology.Absolute, quantity: quantity, dropped: dropped}, true
 		}
-		return scale{dim: left.dim, quantity: quantity}, true
+		return scale{dim: left.dim, quantity: quantity, dropped: dropped}, true
 	}
 	switch {
 	case left.kind == metrology.Absolute && right.kind == metrology.Absolute:
@@ -210,7 +216,7 @@ func (c *checker) combined(name string, call *ssa.CallCommon) (scale, bool) {
 	case right.kind == metrology.Absolute:
 		return scale{}, false
 	default:
-		return scale{dim: left.dim, kind: left.kind, quantity: quantity}, true
+		return scale{dim: left.dim, kind: left.kind, quantity: quantity, dropped: dropped}, true
 	}
 }
 
@@ -221,9 +227,11 @@ func (c *checker) scaled(name string, call *ssa.CallCommon) (scale, bool) {
 		return scale{}, false
 	}
 	if name == "Mul" {
-		return scale{dim: dimension.Product(left.dim, right.dim)}, true
+		dim := dimension.Product(left.dim, right.dim)
+		return scale{dim: dim, dropped: dropTag(dim, left, right)}, true
 	}
-	return scale{dim: dimension.Quotient(left.dim, right.dim)}, true
+	dim := dimension.Quotient(left.dim, right.dim)
+	return scale{dim: dim, dropped: dropTag(dim, left, right)}, true
 }
 
 // operands resolves the two values an operation combines: the last two entries
@@ -244,4 +252,44 @@ func last(call *ssa.CallCommon) ssa.Value { return call.Args[len(call.Args)-1] }
 // untagged operand goes either way.
 func compatible(left, right metrology.Quantity) bool {
 	return left == "" || right == "" || left == right
+}
+
+// effective is the quantity a scale speaks for: its own tag where it has one,
+// and otherwise the tag an earlier product dropped (D16).
+//
+// The two are not interchangeable at the run time — a dropped tag is gone, and
+// the arithmetic treats the magnitude as untagged — which is exactly why the
+// checker keeps them apart and only compares them here.
+func effective(s scale) metrology.Quantity {
+	if s.quantity != "" {
+		return s.quantity
+	}
+	return s.dropped
+}
+
+// dropTag reports the quantity a multiplicative result carries as provenance.
+//
+// A product drops the tag (D6) and the run time cannot get it back. The checker
+// can, for the one case where the tag still says something about the result: an
+// operand whose dimension the result kept. Scaling a becquerel by a plain
+// number leaves a T⁻¹ that is still a radioactivity; multiplying it by a metre
+// leaves a T⁻¹L¹ that is not anything the catalogue names, and there the tag is
+// gone for good.
+//
+// Where both operands survive with tags of their own and the tags differ —
+// a plane angle times a solid angle, both dimensionless — there is no single
+// answer, and no answer is the same as none.
+func dropTag(result dimension.Dimension, left, right scale) metrology.Quantity {
+	var tag metrology.Quantity
+	for _, operand := range [...]scale{left, right} {
+		carried := effective(operand)
+		if operand.dim != result || carried == "" {
+			continue
+		}
+		if tag != "" && tag != carried {
+			return ""
+		}
+		tag = carried
+	}
+	return tag
 }

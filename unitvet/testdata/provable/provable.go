@@ -202,3 +202,31 @@ func anUntaggedSumTakesTheTag() {
 	sum, _ := rate.Add(frequency.Hertz.Of(50))
 	_, _ = sum.To(activity.Becquerel) // want `To on incompatible quantities: frequency and radioactivity`
 }
+
+// A product drops the quantity tag (D6), so the run time accepts what follows
+// and this pass does not: scaling a becquerel by a plain number leaves a T⁻¹
+// that is still a radioactivity, whatever the arithmetic has forgotten (D16).
+func aDroppedTagStillConflicts() {
+	scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
+	_, _ = scaled.Add(frequency.Hertz.Of(50)) // want `Add on incompatible quantities: a magnitude computed from radioactivity and frequency; Mul and Div drop the tag \(D6\), so the run time no longer sees the conflict`
+}
+
+func aDroppedTagConflictsWithAConversion() {
+	scaled, _ := activity.Becquerel.Of(5).Div(ratio.One.Of(2))
+	_, _ = scaled.To(frequency.Hertz) // want `To on incompatible quantities: a magnitude computed from radioactivity and frequency; Mul and Div drop the tag \(D6\), so the run time no longer sees the conflict`
+}
+
+// The same through the composition of the units themselves, and with the tag
+// on the far side of the comparison.
+func aDroppedTagSurvivesUnitComposition() {
+	per, _ := activity.Becquerel.Per(ratio.One)
+	_, _ = frequency.Hertz.Of(50).Cmp(per.Of(5)) // want `Cmp on incompatible quantities: frequency and a magnitude computed from radioactivity; Mul and Div drop the tag \(D6\), so the run time no longer sees the conflict`
+}
+
+// Provenance travels through a sum, which neither drops a tag nor restores
+// one.
+func aDroppedTagSurvivesASum() {
+	scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
+	sum, _ := scaled.Add(scaled)
+	_, _ = sum.To(frequency.Hertz) // want `To on incompatible quantities: a magnitude computed from radioactivity and frequency; Mul and Div drop the tag \(D6\), so the run time no longer sees the conflict`
+}

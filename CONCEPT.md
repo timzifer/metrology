@@ -10,7 +10,7 @@
 | **State** | complete for the scope of section 6; `v1.0.0` awaits the API review of section 7 |
 
 This document holds the architecture and the reasoning behind it. The decisions
-are numbered D1 … D15 and referenced from code comments; a change that
+are numbered D1 … D16 and referenced from code comments; a change that
 contradicts one updates the decision first, in the same pull request, with the
 reason. Silent divergence between this document and the code is the failure mode
 it exists to prevent.
@@ -281,6 +281,12 @@ that tries to guess will guess wrong. Naming the result is an explicit, checked
 conversion — `q.To(pressure.Pascal)`, or `catalog.Canonical` for the unit that
 dimension resolves to. Absolute values may not be multiplied at all: 20 °C times
 2 is physically meaningless and returns an error.
+
+The drop is unconditional and stays that way: the tag a becquerel loses to a
+product is a tag the run time cannot get back, and putting it back would be the
+guessing this rule exists to forbid. What *can* remember it is the static
+checker, which walks the operands anyway — D16 has the case and the three rules
+that keep it provable.
 
 **An interval unit may not carry an offset.** An offset is what makes a scale
 affine, and an affine scale measures points. Rejecting the combination at
@@ -601,6 +607,10 @@ columns are asserted:
 | assignment to local variables, then `p.Sub(t)` | reported |
 | `temperature.Celsius.Of(20).Add(temperature.Celsius.Of(5))` | reported — the affine rule of D6 |
 | `frequency.Hertz.Of(50).To(activity.Becquerel)` | reported — the quantity tag of D6 |
+| `becquerel.Mul(ratio)`, then `.Add(hertz)` | reported — the dropped tag of D16; the run time accepts it |
+| the same across a package boundary | reported — the fact carries the provenance |
+| `becquerel.Mul(metre)`, then `.Div(metre)`, then `.Add(hertz)` | silent — the dimension changed, so the tag is gone for good |
+| a plane angle times a solid angle, then converted | silent — two surviving tags disagree, which is no answer |
 | a unit computed with `Div`, `Per` or `Pow`, then used | reported — the walk follows the composition |
 | operand from another package's function with an invariant unit | reported, via facts |
 | same dimension, different units (`bar` + `Pa`) | correctly silent |
@@ -621,11 +631,13 @@ hertz converted into a becquerel. Those are the same walk with a different
 comparison, and leaving them out would have shipped a checker that had the
 information to prove `20 °C + 5 °C` wrong and declined to say so. Every rule the
 pass applies is one the run time applies, in the order the run time applies it,
-so a diagnostic and the error it predicts never disagree. What is *not* checked
+so a diagnostic and the error it predicts never disagree — with the single
+exception D16 adds, the tag a product dropped, which the run time has no way
+left to see and which says so in its own message. What is *not* checked
 is a declared result unit for `Div`: the quotient carries the unit its operands
 gave it and is named in a separate, checked step.
 
-**Four resolution rules that are easy to get wrong.**
+**Five resolution rules that are easy to get wrong.**
 
 - **A unit is trusted only where the catalogue names it.** The resolver reads a
   package-level variable when — and only when — the generated table has it, which
@@ -642,6 +654,12 @@ gave it and is named in a separate, checked step.
   the pass says nothing about the result rather than guessing. Recording the
   declared interval unit in the table would close this; it is a table entry, not
   a redesign.
+- **A dropped tag is provenance, not a tag.** The checker records the quantity a
+  product discarded, and never claims the value still carries it: an untagged
+  T⁻¹ computed from a becquerel converts into a curie without a word, and only a
+  *conflicting* tag is reported (D16). Merging the two fields would turn every
+  legitimate naming of a computed magnitude into a diagnostic, which is the
+  false-positive failure this pass is built to avoid.
 - **A method value is refused, not unpacked.** It binds the receiver into a
   closure and calls a wrapper without it, and the wrapper carries the original
   method's own object — so reading the operands off such a call by position reads
@@ -827,6 +845,89 @@ because the quotient is unbounded and reporting a bound for it would be a lie
 about the data. A rounding mode on `Engine` where there was one. A `unitvet`
 receiver. And section 7 gains an item: whether `Range` is part of the `v1.0.0`
 surface or ships behind it.
+
+---
+
+### D16 — The quantity tag is identity, and `unitvet` follows the tag a product drops
+
+D6 gave `Quantity` three behaviours that were each defensible on their own and
+never reconciled: `Unit.Equal` compares the tag, `Add`, `Sub`, `Cmp` and `To`
+refuse a conflict, `Mul` and `Div` throw the tag away, and `parse` puts one back
+by looking the expression's scale up in a catalogue. Before the type can be
+frozen (section 7) it has to mean one thing.
+
+**It means identity.** A hertz and a becquerel are both T⁻¹ and are not the same
+measurement; treating one as the other is a wrong number delivered with
+confidence, which is the failure this library exists to prevent. So the tag is
+part of what a unit *is*, not a label on it, and the run time already enforces
+that: `sameQuantity` guards every additive operation and `Engine.To` guards
+every conversion. Nothing in the core changes.
+
+**The untagged wildcard is not an exception to it, it is what makes it usable.**
+Multiplication and division drop the tag — they must, because a becquerel times
+a metre is not anything the catalogue names — so every computed magnitude is
+untagged, and a rule that refused to let an untagged magnitude meet a tagged one
+would make each computation a dead end. The wildcard is the price of the drop,
+and it is worth paying at the run time, where the alternative is a library in
+which no quotient can ever be named.
+
+**But it opens a hole, and the hole is static.** The tag can be laundered:
+
+```go
+scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
+_, _ = scaled.Add(frequency.Hertz.Of(50))          // accepted at run time
+```
+
+The product left the dimension untouched and dropped the tag, so what reaches
+the sum is an untagged T⁻¹ and the wildcard lets it through. The magnitude is
+still a radioactivity. The run time cannot know that — it holds a value, a unit
+and a dimension, and the tag it discarded is gone — and giving it a memory would
+mean putting the tag back into `Mul` and `Div`, which is exactly the guessing D6
+forbids and would make the product of a torque and an angle a torque.
+
+**`unitvet` has the information the run time discarded.** It walks the operands
+backwards anyway (D13), so it can carry the dropped tag as *provenance*: the
+quantity a multiplicative operation discarded while leaving the dimension
+intact. That provenance conflicts with a real tag exactly where the discarded
+one would have:
+
+```
+app/app.go:12:9: Add on incompatible quantities: a magnitude computed from
+                 radioactivity and frequency; Mul and Div drop the tag (D6),
+                 so the run time no longer sees the conflict
+```
+
+**Three rules keep it provable rather than clever.**
+
+- **Provenance survives only where the dimension does.** A becquerel scaled by a
+  plain number is still a radioactivity; a becquerel times a metre is a T⁻¹L¹
+  that names no quantity, and dividing the metre back out does not recover one.
+  Where the result dimension differs from the operand's, the tag is gone for
+  good and the checker forgets it too.
+- **Two surviving tags that disagree are no answer.** A plane angle times a
+  solid angle is dimensionless and is neither, so the product carries no
+  provenance rather than one of the two.
+- **It is provenance, never a tag.** The checker never claims the value *is* a
+  radioactivity — it is not, the arithmetic untagged it, and `To(activity.Curie)`
+  on it is legal and stays silent. The two fields are separate for the same
+  reason `Kind` and `Quantity` are.
+
+**This is the one diagnostic that predicts no run-time error**, and it is the
+reason this is a decision rather than a rule inside D13. Everywhere else the
+pass and the run time agree by construction, and a reader who runs the code can
+confirm the diagnostic. Here the code runs and produces a number, and the
+message says so in its own text, because a checker that reports something the
+reader cannot reproduce is a checker the reader stops believing. The escape is
+the one D13 already ships: `//unitvet:ignore` on the line, with a reason, for
+the case where the reinterpretation is deliberate.
+
+**What it does not settle.** Two of the three questions section 7 asks about
+`Quantity` remain open, and both are about the *namespace* rather than the
+meaning: whether the tags this module ships are reserved names that belong in
+generated constants instead of string literals, and what an untagged magnitude
+means crossing the text boundary of D12, where `50 Hz` reads back tagged and
+`50 s⁻¹` reads back untagged for the same scale. D16 answers what the tag *is*;
+those answer who owns it and how it survives serialisation.
 
 ---
 
@@ -1020,17 +1121,16 @@ at minimum:
   the substitute for a compile error
 - whether `parse.Text` is the right shape for the decoding boundary, or whether a
   parser-typed destination generated per catalogue would serve better
-- what `Quantity` promises. It is a `string` (D6), so the tag is open by
-  construction: a caller's catalogue may spell `"frequency"` and mean whatever it
-  likes by it, and nothing links `metrology.Quantity("frequency")` to the
-  catalogue entry of the same name — the tags are YAML data, not exported
-  constants, and ten of the eighty-two units carry one. Three questions have to
-  get one consistent answer before the type is frozen:
-  **Is a quantity part of a unit's identity or an interpretation of it?**
-  `Unit.Equal` compares the tag, arithmetic drops it (D6), and `parse` restores
-  it by looking the expression's scale up in the catalogue. Those are three
-  different answers today, defensible one at a time; the review has to say which
-  one the type means.
+- what `Quantity` promises. **The first of its three questions is answered: the
+  tag is identity** (D16). A hertz is not a becquerel, the run time already
+  refuses the conflict in every additive operation and every conversion, and
+  `unitvet` now follows the tag through the products that drop it. Two remain,
+  and both are about the namespace rather than the meaning. It is a `string`
+  (D6), so the tag is open by construction: a caller's catalogue may spell
+  `"frequency"` and mean whatever it likes by it, and nothing links
+  `metrology.Quantity("frequency")` to the catalogue entry of the same name —
+  the tags are YAML data, not exported constants, and ten of the eighty-two
+  units carry one.
   **Whose namespace is it?** Either the tags this module ships are reserved
   names with a documented meaning — in which case they belong in generated
   constants rather than in string literals, and a caller redefining one is doing
@@ -1038,8 +1138,12 @@ at minimum:
   case two catalogues in one program may tag the same dimension differently and
   the compatibility rule of D6 is comparing spellings across namespaces that
   never agreed to share one.
+  Answering it decides whether the tags belong in generated constants, which is
+  a `catgen` change and not a design one.
   **What does untagged mean at a boundary?** Inside the core it is the wildcard
-  that keeps a computed magnitude nameable, and that is settled. Crossing D12 it
+  that keeps a computed magnitude nameable, and that is settled — D16 says why,
+  and moves the enforcement the wildcard gives up into the static checker.
+  Crossing D12 it
   is what an expression carries when no catalogue entry spells it: `50 Hz` reads
   back tagged `frequency`, `50 s⁻¹` reads back untagged, and the two are the same
   scale. The text form cannot carry a tag of its own (section 8), so the spelling
@@ -1087,6 +1191,7 @@ additive, opt-in, and can ship a new version independently.
 | Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it, and why `BenchmarkKernel` measures that boundary as faster than any arithmetic swapped in behind it (O2). If it binds, the escape is a fast path for values that fit losslessly in `int64`, which O2 now measures rather than proposes: nine times on an accumulation, no allocations, and the same answer as the slow path — not a return to `float64`, which O2 measures as slower than the boundary it would replace and as a different arithmetic besides. |
 | Kind semantics proliferate | Every new kind needs a justification in the catalogue. No dimension collision and no affinity, no kind. |
 | `unitvet` produces a false positive | The one failure mode that kills the tool, because users disable it and then get nothing. Every rule must be provable before it reports; `analysistest` asserts the silent cases as explicitly as the reported ones. Prefer missing a real bug over inventing one. |
+| The dropped-tag rule of D16 becomes a false positive | It is the one diagnostic that predicts no run-time error, so it is the one rule whose noise would be indistinguishable from a bug in the checker. Held down by the two limits D16 states — provenance dies with the dimension, and two disagreeing tags leave none — both asserted in the silent half of the corpus. If it ever reports a deliberate reinterpretation more often than a mistake, the rule goes, not the marker that silences it. |
 | `unitvet` drifts from the library | Prevented by construction: its dimension table is generated from the catalogue of D8, in the same `go generate` run. A hand-maintained second table would be the defect waiting to happen. |
 | The coverage target degrades into assertion-free tests | The known failure mode of a 100 % rule. Mitigated by keeping the correctness weight in property and golden tests, and by treating a coverage-only test in review as a defect. If the number is ever met by tests that assert nothing, the rule has done harm. |
 | Go 1.27 as a minimum deters adopters | Accepted deliberately. The fallback is free functions instead of generic methods — a cost in ergonomics, not in substance. |
