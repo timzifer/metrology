@@ -15,12 +15,20 @@ import (
 // dim is the dimension every unit in this package measures.
 var dim = dimension.New(dimension.Exponents{Time: -1})
 
+// Quantity is what every unit in this package measures, where the
+// dimension alone does not say it: radioactivity.
+//
+// It is a reserved name of this catalogue (D6, D16) and the spelling a caller
+// should compare against — a string literal of the same words is a second
+// spelling of one fact, with nothing to keep the two in step.
+const Quantity metrology.Quantity = "radioactivity"
+
 // Becquerel is one nuclear decay per second.
 //
 // Source: SI Brochure 9th ed., §2.3.4 Table 4
 var Becquerel = metrology.MustUnit(metrology.UnitDef{
 	Dimension: dim,
-	Quantity:  "radioactivity",
+	Quantity:  Quantity,
 	Symbol:    symbol.SI("Bq"),
 })
 
@@ -29,7 +37,7 @@ var Becquerel = metrology.MustUnit(metrology.UnitDef{
 // Source: NIST SP 811 (2008), Appendix B.8
 var Curie = metrology.MustUnit(metrology.UnitDef{
 	Dimension: dim,
-	Quantity:  "radioactivity",
+	Quantity:  Quantity,
 	Symbol:    symbol.Static("Ci"),
 	Numerator: "37000000000",
 })

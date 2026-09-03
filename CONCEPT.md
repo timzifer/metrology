@@ -256,6 +256,14 @@ lumen are both J. A string tag rather than an enum, because the catalogue is
 data (D8) and the set of quantities is open — the whole SI needs nine tags, and
 none of them touches a line of the core.
 
+The tag is a `string` and the type is open, but the *spellings this catalogue
+uses* are not left to a string literal at the call site: every tagged package
+declares its own — `frequency.Quantity`, `activity.Quantity` — and the generator
+writes the unit definitions in terms of that same constant, so a package has one
+spelling of the fact rather than two. A caller with a catalogue of its own
+declares its own constants; the type stays open, the *names* are owned by
+whoever generated them (D16).
+
 The zero `Quantity` is untagged, and untagged is compatible with everything.
 That is not laxity, it is the only workable rule: multiplication and division
 drop the tag, so *every computed magnitude is untagged*, and a rule that refused
@@ -921,13 +929,32 @@ reader cannot reproduce is a checker the reader stops believing. The escape is
 the one D13 already ships: `//unitvet:ignore` on the line, with a reason, for
 the case where the reinterpretation is deliberate.
 
-**What it does not settle.** Two of the three questions section 7 asks about
-`Quantity` remain open, and both are about the *namespace* rather than the
-meaning: whether the tags this module ships are reserved names that belong in
-generated constants instead of string literals, and what an untagged magnitude
-means crossing the text boundary of D12, where `50 Hz` reads back tagged and
-`50 s⁻¹` reads back untagged for the same scale. D16 answers what the tag *is*;
-those answer who owns it and how it survives serialisation.
+**The namespace follows from it.** If the tag is identity then a string literal
+at a call site is a second spelling of an identity, with nothing to keep the two
+in step — so every tagged package declares the constant and `catgen` writes the
+unit definitions from it:
+
+```go
+const Quantity metrology.Quantity = "frequency"   // frequency/frequency_gen.go
+
+u, ok := catalog.Canonical(dim, kind, frequency.Quantity)
+```
+
+It goes in the quantity package rather than in `catalog`, because that is the
+package a caller already imports for the units, and reaching a tag through
+`catalog` would pull all forty-three quantity packages in behind it. The tags
+are therefore *reserved names of this catalogue*, not of the type: `Quantity`
+stays a `string` and a caller's own catalogue declares its own constants for its
+own tags. Two catalogues in one program that spell one dimension differently are
+still two namespaces, and D6's compatibility rule still compares spellings
+across them — but each side now has one place where its spelling is written
+down, which is what makes a collision something a person can look up.
+
+**What it does not settle.** One question from section 7 stays open, and it is
+the text boundary of D12: `50 Hz` reads back tagged and `50 s⁻¹` reads back
+untagged for the same scale, because the text form cannot carry a tag of its own
+(section 8). D16 says what the tag is and who owns the spelling; how it survives
+serialisation is still a v1 question.
 
 ---
 
@@ -1121,25 +1148,21 @@ at minimum:
   the substitute for a compile error
 - whether `parse.Text` is the right shape for the decoding boundary, or whether a
   parser-typed destination generated per catalogue would serve better
-- what `Quantity` promises. **The first of its three questions is answered: the
-  tag is identity** (D16). A hertz is not a becquerel, the run time already
+- what `Quantity` promises. **Two of its three questions are answered** (D16),
+  and one is left. **Is a quantity part of a unit's identity or an
+  interpretation of it?** Identity. A hertz is not a becquerel; the run time
   refuses the conflict in every additive operation and every conversion, and
-  `unitvet` now follows the tag through the products that drop it. Two remain,
-  and both are about the namespace rather than the meaning. It is a `string`
-  (D6), so the tag is open by construction: a caller's catalogue may spell
-  `"frequency"` and mean whatever it likes by it, and nothing links
-  `metrology.Quantity("frequency")` to the catalogue entry of the same name —
-  the tags are YAML data, not exported constants, and ten of the eighty-two
-  units carry one.
-  **Whose namespace is it?** Either the tags this module ships are reserved
-  names with a documented meaning — in which case they belong in generated
-  constants rather than in string literals, and a caller redefining one is doing
-  something the library can name — or they are local to a catalogue, in which
-  case two catalogues in one program may tag the same dimension differently and
-  the compatibility rule of D6 is comparing spellings across namespaces that
-  never agreed to share one.
-  Answering it decides whether the tags belong in generated constants, which is
-  a `catgen` change and not a design one.
+  `unitvet` now follows the tag through the products that drop it. The type
+  stays a `string`, because the catalogue is data (D8) and the set of quantities
+  is open — ten of the eighty-two units carry a tag.
+  **Whose namespace is it? Answered with the first** (D16): the tags this module
+  ships are reserved names of *this catalogue*, and every tagged package now
+  declares one — `frequency.Quantity` — with the unit definitions generated from
+  the same constant. They are not reserved names of the *type*: `Quantity` stays
+  a `string`, and a caller's catalogue declares its own. Two catalogues in one
+  program may still tag one dimension differently, and D6's rule still compares
+  spellings across them; what changed is that each side has one place where its
+  spelling is written down.
   **What does untagged mean at a boundary?** Inside the core it is the wildcard
   that keeps a computed magnitude nameable, and that is settled — D16 says why,
   and moves the enforcement the wildcard gives up into the static checker.

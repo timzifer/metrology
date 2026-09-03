@@ -31,7 +31,10 @@ not what D15 describes.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
-`source:`; the generator rejects one without. One `catgen` run writes the
+`source:`; the generator rejects one without. A group with a `quantity:` also
+gets a generated `const Quantity` in its package — `frequency.Quantity` — and
+the unit definitions are written from that constant, so the tag has one spelling
+per package (D16). Compare against the constant, never against a string literal. One `catgen` run writes the
 quantity packages, `catalog/units_gen.go` **and** `unitvet/table_gen.go`: the
 checker resolves units against the catalogue it was generated from, and that is
 the only reason it cannot drift out of step with the run time.
@@ -86,6 +89,13 @@ reports every way a symbol may be written, and the parser indexes exactly those.
 A static symbol takes no prefix at all — that is what keeps `cd` the candela and
 not a centi-day. Do not replace it with a matcher that strips a leading letter
 and hopes.
+
+**A quantity tag is identity, and its spelling belongs to the catalogue that
+generated it (D16).** `Quantity` stays a `string` so a caller can have tags of
+its own, but this module's tags are declared as constants in the packages that
+own them. Do not reintroduce string literals for them, and do not move the
+constants into `catalog` — that would pull all forty-three quantity packages in
+behind a tag comparison.
 
 **Kind and quantity are separate fields (D6).** `Kind` is absolute versus
 interval. `Quantity` is which quantity a shared dimension is being read as — the
