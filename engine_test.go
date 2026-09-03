@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/timzifer/metrology"
 )
 
@@ -125,5 +126,82 @@ func TestEngineErrors(t *testing.T) {
 	}
 	if _, err := e.To(Bar.Of(1), Metre); !errors.Is(err, metrology.ErrDimension) {
 		t.Errorf("To: %v, want ErrDimension", err)
+	}
+}
+
+// D15: an interval bound rounds outward, and this is the method that makes it
+// possible. 1 torr is 133.32236842105263157894… Pa, so the twentieth digit is
+// where the three modes part company — and the directed pair brackets the
+// default rather than agreeing with it on one side and losing on the other.
+func TestEngineRounding(t *testing.T) {
+	one := mustOf(Torr, "1")
+
+	for _, tc := range []struct {
+		name   string
+		engine metrology.Engine
+		want   string
+	}{
+		{"the zero engine is unchanged", metrology.Engine{}, "133.32236842105263158"},
+		{"toward -inf", metrology.Engine{}.Rounding(apd.RoundFloor), "133.32236842105263157"},
+		{"toward +inf", metrology.Engine{}.Rounding(apd.RoundCeiling), "133.32236842105263158"},
+		{"half even", metrology.Engine{}.Rounding(apd.RoundHalfEven), "133.32236842105263158"},
+		{"the empty mode is the default", metrology.Engine{}.Rounding(""), "133.32236842105263158"},
+		{"precision is kept", metrology.NewEngine(5).Rounding(apd.RoundFloor), "133.32"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.engine.To(one, Pascal)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if want := tc.want + " Pa"; got.String() != want {
+				t.Errorf("got %s, want %s", got, want)
+			}
+		})
+	}
+}
+
+// The directed modes bracket the exact value from both sides: the floor is never
+// above it and the ceiling never below, whichever operation rounds. That is the
+// whole property D15 rests on, asserted here on the core rather than on the
+// layer that needs it.
+func TestEngineRoundingBrackets(t *testing.T) {
+	exact := metrology.NewEngine(60)
+	floor := metrology.Engine{}.Rounding(apd.RoundFloor)
+	ceiling := metrology.Engine{}.Rounding(apd.RoundCeiling)
+
+	for _, tc := range []struct {
+		name string
+		with func(metrology.Engine) (metrology.Measurement, error)
+	}{
+		{"a conversion", func(e metrology.Engine) (metrology.Measurement, error) {
+			return e.To(mustOf(Torr, "1"), Pascal)
+		}},
+		{"a quotient", func(e metrology.Engine) (metrology.Measurement, error) {
+			return e.Div(mustOf(Metre, "1"), mustOf(Metre, "3"))
+		}},
+		{"a negative quotient", func(e metrology.Engine) (metrology.Measurement, error) {
+			return e.Div(mustOf(Metre, "-1"), mustOf(Metre, "3"))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reference, err := tc.with(exact)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			low, err := tc.with(floor)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			high, err := tc.with(ceiling)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cmp, err := low.Cmp(reference); err != nil || cmp > 0 {
+				t.Errorf("the floor %s is above the exact %s (%v)", low, reference, err)
+			}
+			if cmp, err := high.Cmp(reference); err != nil || cmp < 0 {
+				t.Errorf("the ceiling %s is below the exact %s (%v)", high, reference, err)
+			}
+		})
 	}
 }

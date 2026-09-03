@@ -81,11 +81,15 @@ func (c *checker) exportFact(fn *ssa.Function) bool {
 }
 
 // coreType reports which of the library's types a type is, if it is one.
-func (c *checker) coreType(t types.Type) (string, bool) {
+//
+// A Range counts as much as a Measurement: a function returning one is a
+// function whose result is on a scale, and the fact that carries that scale
+// across a package boundary says nothing about which of the two it was.
+func (c *checker) coreType(t types.Type) (owned, bool) {
 	named, isNamed := types.Unalias(t).(*types.Named)
 	if !isNamed {
-		return "", false
+		return owned{}, false
 	}
-	name, ok := c.core[named.Obj()]
-	return name, ok
+	found, ok := c.core[named.Obj()]
+	return found, ok
 }

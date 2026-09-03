@@ -71,6 +71,28 @@
 // the metre back out recovers nothing — and two surviving tags that disagree
 // leave none.
 //
+// # The interval layer
+//
+// The pass has rules for two packages, not one. A [uncertainty.Range] is a unit
+// and two magnitudes, so its dimension, its kind and its quantity are those of
+// its bounds — and every rule above therefore applies to it unchanged, without
+// a clause of its own:
+//
+//	_, _ = uncertainty.Of(pressure.Bar.Of(2.5)).
+//		Add(uncertainty.Of(temperature.Celsius.Of(20))) // reported
+//
+// This is not a convenience. D15 moved a second arithmetic surface out of the
+// core, and a checker that went blind exactly where the arithmetic went would
+// be worse than no checker, because nobody would notice. What it also means is
+// that the three constructors — Of, Between and Symmetric — are resolved even
+// though they are package-level functions rather than methods: without them no
+// range resolves at all, and the pass would be silent on every one of them.
+//
+// The one thing it will not say is which interval unit the width of an absolute
+// range is read on. That is declared by the scale — K for a °C — and the
+// generated table does not record it, which is the same silence a difference of
+// two points already gets.
+//
 // # Silencing a report
 //
 // A test that asserts an operation fails is an operation the pass is right to
@@ -100,6 +122,34 @@ import (
 // corePath is the import path of the library whose operations this pass has
 // rules for. The generated table keys its units by paths under it.
 const corePath = "github.com/timzifer/metrology"
+
+// rangePath is the interval layer of D15. It is a second package with a second
+// receiver type, and the pass has to know it: a range added to a range of
+// another dimension is exactly the provable class this checker exists for, and
+// a checker that went blind where the arithmetic moved would be worse than no
+// checker at all, because nobody would notice.
+const rangePath = corePath + "/uncertainty"
+
+// corePackages names, for each package this pass has rules for, the types whose
+// methods those rules are about.
+//
+// The rules themselves do not distinguish the two: the dimension, the kind and
+// the quantity of a range are those of its bounds, so Add on a Range is Add on
+// a Measurement as far as anything provable here is concerned. What the owner
+// is needed for is telling apart two methods that share a name — Unit.Of puts a
+// magnitude on a unit, uncertainty.Of puts a range around a measurement.
+var corePackages = map[string][]string{
+	corePath:  {"Measurement", "Unit", "Engine"},
+	rangePath: {"Range", "Engine"},
+}
+
+// rangeConstructors are the package-level functions of the interval layer that
+// build a Range out of measurements.
+//
+// They are functions and not methods, so the receiver rule of coreCall does not
+// reach them — and without them no range is resolvable at all, since every
+// range enters through one of these three.
+var rangeConstructors = map[string]bool{"Of": true, "Between": true, "Symmetric": true}
 
 // ignoreMarker silences the diagnostics on the line it is written on and on
 // the line below it. The spelling matches the //coverage:ignore markers of
@@ -185,10 +235,11 @@ type checker struct {
 	pass *analysis.Pass
 
 	// core maps the library's own types, as the package under analysis knows
-	// them, to their names. Identity, not import paths: within one pass every
-	// package shares one *types.TypeName per type, and comparing pointers
-	// cannot be fooled by a vendored copy under a different path.
-	core map[*types.TypeName]string
+	// them, to their names and the package each belongs to. Identity, not
+	// import paths: within one pass every package shares one *types.TypeName
+	// per type, and comparing pointers cannot be fooled by a vendored copy
+	// under a different path.
+	core map[*types.TypeName]owned
 
 	// resolved memoises the walk. The SSA of a chain of arithmetic is a graph
 	// with shared operands, and re-walking it from every use is exponential.
@@ -231,30 +282,40 @@ func run(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-// coreTypes finds Measurement, Unit and Engine as the package under analysis
-// knows them.
+// coreTypes finds the library's own types as the package under analysis knows
+// them, mapped to the package that owns each.
 //
 // It walks the import graph rather than looking at the direct imports: a
 // program usually imports a quantity package and never names the core at all,
-// and pressure.Bar is still a metrology.Unit.
-func coreTypes(pkg *types.Package) map[*types.TypeName]string {
-	core := findPackage(pkg, map[*types.Package]bool{})
-	if core == nil {
-		return nil
-	}
-	out := map[*types.TypeName]string{}
-	for _, name := range []string{"Measurement", "Unit", "Engine"} {
-		if tn, isType := core.Scope().Lookup(name).(*types.TypeName); isType {
-			out[tn] = name
+// and pressure.Bar is still a metrology.Unit. A program that reaches only one
+// of the two packages gets the rules for that one; a program that reaches
+// neither gets none, and the pass returns immediately.
+func coreTypes(pkg *types.Package) map[*types.TypeName]owned {
+	out := map[*types.TypeName]owned{}
+	for path, names := range corePackages {
+		found := findPackage(pkg, path, map[*types.Package]bool{})
+		if found == nil {
+			continue
+		}
+		for _, name := range names {
+			if tn, isType := found.Scope().Lookup(name).(*types.TypeName); isType {
+				out[tn] = owned{owner: path, name: name}
+			}
 		}
 	}
 	return out
 }
 
-// findPackage returns the library's package from anywhere in the import graph
-// of pkg, or nil where it is not reachable.
-func findPackage(pkg *types.Package, seen map[*types.Package]bool) *types.Package {
-	if pkg.Path() == corePath {
+// owned names one of the library's types and the package it lives in.
+type owned struct {
+	owner string // the import path, corePath or rangePath
+	name  string // Measurement, Unit, Engine, Range
+}
+
+// findPackage returns the package with the given import path from anywhere in
+// the import graph of pkg, or nil where it is not reachable.
+func findPackage(pkg *types.Package, path string, seen map[*types.Package]bool) *types.Package {
+	if pkg.Path() == path {
 		return pkg
 	}
 	if seen[pkg] {
@@ -262,7 +323,7 @@ func findPackage(pkg *types.Package, seen map[*types.Package]bool) *types.Packag
 	}
 	seen[pkg] = true
 	for _, imported := range pkg.Imports() {
-		if found := findPackage(imported, seen); found != nil {
+		if found := findPackage(imported, path, seen); found != nil {
 			return found
 		}
 	}
