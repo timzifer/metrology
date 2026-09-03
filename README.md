@@ -73,7 +73,7 @@ and the catalogue index:
   source: NIST SP 811 (2008), Appendix B.8
 ```
 
-It holds **82 units across 43 quantity packages**: all seven SI base units, all
+It holds **90 units across 44 quantity packages**: all seven SI base units, all
 twenty-two named derived units, the CGS and legacy units that still appear in
 data sheets, and the non-SI units of NIST SP 811 that process engineering uses.
 A second file adds **14 customary units** in `units/customary` — the inch, foot,
@@ -89,11 +89,13 @@ catalogue with a missing source, a duplicate symbol, two units claiming the same
 dimension and quantity, or a factor that is not a number — at generation time, so
 a defective catalogue is a failed build rather than a panic in production.
 
-Every factor is **exact**, and units that cannot be exact are left out rather
-than rounded in: the degree of arc is π/180 radians, which has no finite decimal
-fraction, so it waits for symbolic factors instead of shipping as
-`0.017453292519943295`. A golden test checks the whole catalogue against the
-factors printed in NIST SP 811.
+Every factor is **exact**, and a factor that is not rational carries its
+irrational part symbolically rather than rounded: the degree of arc is stored as
+π/180 and not as `0.017453292519943295` (D20). The exponents of π subtract on
+conversion, so a degree is exactly 3600 arcseconds at any precision, and only a
+conversion that crosses out of the π units — a degree into a radian — puts digits
+in place of π. A golden test checks the whole catalogue against the factors
+printed in NIST SP 811.
 
 For the cases where the unit is not known at compile time — a symbol read from a
 configuration file, or a computed dimension that needs a unit to be expressed

@@ -22,6 +22,7 @@ import (
 	"github.com/timzifer/metrology/units/dose"
 	"github.com/timzifer/metrology/units/duration"
 	"github.com/timzifer/metrology/units/energy"
+	"github.com/timzifer/metrology/units/fieldstrength"
 	"github.com/timzifer/metrology/units/fluxdensity"
 	"github.com/timzifer/metrology/units/force"
 	"github.com/timzifer/metrology/units/frequency"
@@ -55,8 +56,12 @@ import (
 // all is every unit in the catalogue, ordered by catalogue id.
 var all = []metrology.Unit{
 	current.Ampere,                          // ampere
+	fieldstrength.AmperePerMetre,            // ampere_per_metre
 	length.Angstrom,                         // angstrom
+	angle.Arcminute,                         // arcminute
+	angle.Arcsecond,                         // arcsecond
 	area.Are,                                // are
+	length.AstronomicalUnit,                 // astronomical_unit
 	pressure.Atmosphere,                     // atmosphere
 	pressure.Bar,                            // bar
 	area.Barn,                               // barn
@@ -70,6 +75,7 @@ var all = []metrology.Unit{
 	volumeflow.CubicMetrePerSecond,          // cubic_metre_per_second
 	activity.Curie,                          // curie
 	duration.Day,                            // day
+	angle.Degree,                            // degree
 	force.Dyne,                              // dyne
 	energy.Electronvolt,                     // electronvolt
 	energy.Erg,                              // erg
@@ -81,6 +87,7 @@ var all = []metrology.Unit{
 	imperial.Gallon,                         // gallon_imperial
 	us.Gallon,                               // gallon_us
 	fluxdensity.Gauss,                       // gauss
+	angle.Gon,                               // gon
 	density.GramPerLitre,                    // gram_per_litre
 	absorbeddose.Gray,                       // gray
 	area.Hectare,                            // hectare
@@ -117,9 +124,11 @@ var all = []metrology.Unit{
 	concentration.MolePerLitre,              // mole_per_litre
 	force.Newton,                            // newton
 	surfacetension.NewtonPerMetre,           // newton_per_metre
+	fieldstrength.Oersted,                   // oersted
 	resistance.Ohm,                          // ohm
 	ratio.One,                               // one
 	customary.Ounce,                         // ounce
+	length.Parsec,                           // parsec
 	pressure.Pascal,                         // pascal
 	viscosity.PascalSecond,                  // pascal_second
 	ratio.Percent,                           // percent
@@ -156,6 +165,7 @@ var all = []metrology.Unit{
 // computed into that dimension is expressed in.
 var canonical = map[key]metrology.Unit{
 	{dim: current.Ampere.Dimension(), kind: metrology.Interval, quantity: ""}:                                             current.Ampere,
+	{dim: fieldstrength.AmperePerMetre.Dimension(), kind: metrology.Interval, quantity: ""}:                               fieldstrength.AmperePerMetre,
 	{dim: activity.Becquerel.Dimension(), kind: metrology.Interval, quantity: "radioactivity"}:                            activity.Becquerel,
 	{dim: luminosity.Candela.Dimension(), kind: metrology.Interval, quantity: "luminous intensity"}:                       luminosity.Candela,
 	{dim: charge.Coulomb.Dimension(), kind: metrology.Interval, quantity: ""}:                                             charge.Coulomb,
@@ -203,8 +213,12 @@ var canonical = map[key]metrology.Unit{
 // bySymbol resolves the printed form of a unit back to the unit.
 var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "A", kind: metrology.Interval}:        current.Ampere,
+	{text: "A/m", kind: metrology.Interval}:      fieldstrength.AmperePerMetre,
 	{text: "Å", kind: metrology.Interval}:        length.Angstrom,
+	{text: "′", kind: metrology.Interval}:        angle.Arcminute,
+	{text: "″", kind: metrology.Interval}:        angle.Arcsecond,
 	{text: "a", kind: metrology.Interval}:        area.Are,
+	{text: "au", kind: metrology.Interval}:       length.AstronomicalUnit,
 	{text: "atm", kind: metrology.Interval}:      pressure.Atmosphere,
 	{text: "bar", kind: metrology.Interval}:      pressure.Bar,
 	{text: "b", kind: metrology.Interval}:        area.Barn,
@@ -218,6 +232,7 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "m³/s", kind: metrology.Interval}:     volumeflow.CubicMetrePerSecond,
 	{text: "Ci", kind: metrology.Interval}:       activity.Curie,
 	{text: "d", kind: metrology.Interval}:        duration.Day,
+	{text: "°", kind: metrology.Interval}:        angle.Degree,
 	{text: "dyn", kind: metrology.Interval}:      force.Dyne,
 	{text: "eV", kind: metrology.Interval}:       energy.Electronvolt,
 	{text: "erg", kind: metrology.Interval}:      energy.Erg,
@@ -229,6 +244,7 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "galImp", kind: metrology.Interval}:   imperial.Gallon,
 	{text: "galUS", kind: metrology.Interval}:    us.Gallon,
 	{text: "G", kind: metrology.Interval}:        fluxdensity.Gauss,
+	{text: "gon", kind: metrology.Interval}:      angle.Gon,
 	{text: "g/L", kind: metrology.Interval}:      density.GramPerLitre,
 	{text: "Gy", kind: metrology.Interval}:       absorbeddose.Gray,
 	{text: "ha", kind: metrology.Interval}:       area.Hectare,
@@ -265,9 +281,11 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "mol/L", kind: metrology.Interval}:    concentration.MolePerLitre,
 	{text: "N", kind: metrology.Interval}:        force.Newton,
 	{text: "N/m", kind: metrology.Interval}:      surfacetension.NewtonPerMetre,
+	{text: "Oe", kind: metrology.Interval}:       fieldstrength.Oersted,
 	{text: "Ω", kind: metrology.Interval}:        resistance.Ohm,
 	{text: "1", kind: metrology.Interval}:        ratio.One,
 	{text: "oz", kind: metrology.Interval}:       customary.Ounce,
+	{text: "pc", kind: metrology.Interval}:       length.Parsec,
 	{text: "Pa", kind: metrology.Interval}:       pressure.Pascal,
 	{text: "Pa·s", kind: metrology.Interval}:     viscosity.PascalSecond,
 	{text: "%", kind: metrology.Interval}:        ratio.Percent,

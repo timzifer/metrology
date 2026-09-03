@@ -249,7 +249,7 @@ func (u Unit) linearScale() Unit {
 	if u.kind != Absolute {
 		return u
 	}
-	return Unit{dim: u.dim, sym: u.sym, num: u.num, den: u.den, offset: apd.New(0, 0)}
+	return Unit{dim: u.dim, sym: u.sym, num: u.num, den: u.den, pi: u.pi, offset: apd.New(0, 0)}
 }
 
 // intervalScale returns the unit a difference of two magnitudes on this scale

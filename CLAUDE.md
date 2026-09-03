@@ -13,7 +13,7 @@ dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
 **The library is complete for its stated scope.** The core computes, the
-catalogue holds 82 units across 43 quantity packages, plus 14 customary units in
+catalogue holds 90 units across 44 quantity packages, plus 14 customary units in
 `units/customary` (D19) — all seven SI base units,
 all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
@@ -121,7 +121,7 @@ and hopes.
 generated it (D16).** `Quantity` stays a `string` so a caller can have tags of
 its own, but this module's tags are declared as constants in the packages that
 own them. Do not reintroduce string literals for them, and do not move the
-constants into `catalog` — that would pull all forty-three quantity packages in
+constants into `catalog` — that would pull all forty-four quantity packages in
 behind a tag comparison.
 
 **An interval bound rounds outward, always (D15).** `Lo` is computed with
@@ -147,11 +147,15 @@ hertz and the becquerel are both T⁻¹. The empty quantity is compatible with
 everything, because multiplication and division drop the tag and every computed
 magnitude is therefore untagged. Do not merge the two back into one value.
 
-**Every catalogue factor is exact.** A unit whose factor involves π — the degree
-of arc, the oersted — does not go into the catalogue with a rounded decimal. It
-waits for the symbolic factor of D20 (decided, not built): one π exponent beside
-the fraction, which keeps the entry exact and moves the single unavoidable
-rounding to the conversion that crosses out of the π units. See D4 and D20.
+**Every catalogue factor is exact, π included (D20).** A unit whose factor
+involves π — the degree of arc, the oersted, the parsec — carries the exponent
+beside the fraction, `{den: "180", pi: 1}`, never a rounded decimal. The
+exponents subtract on conversion, so a degree is exactly 3600 arcseconds and only
+a conversion crossing out of the π units puts digits in place of π. The digits
+live in `internal/pi`, they are checked against Machin's formula by the test next
+to them, and they run out: a crossing conversion above `pi.MaxPrecision − 10`
+digits returns a `PrecisionError` rather than fewer correct digits than it
+promises. Never add a unit with a pre-multiplied π — see D4 and D20.
 
 ## Commands
 

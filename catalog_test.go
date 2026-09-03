@@ -64,9 +64,34 @@ var (
 		Dimension: dimension.Θ, Symbol: symbol.Static("°R"),
 		Numerator: "5", Denominator: "9",
 	})
+
+	// D20: the factors that carry a power of π, in both directions. The degree
+	// is π/180 radians and the arcsecond π/648000, so a conversion between the
+	// two cancels the exponent and stays exact; the oersted is 1000/4π amperes
+	// per metre, where the exponent is negative and π lands in the denominator
+	// of the conversion instead.
+	Radian = metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.One, Symbol: symbol.Static("rad"),
+	})
+	Degree = metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.One, Symbol: symbol.Static("°"),
+		Denominator: "180", Pi: 1,
+	})
+	Arcsecond = metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.One, Symbol: symbol.Static("″"),
+		Denominator: "648000", Pi: 1,
+	})
+	AmperePerMetre = metrology.MustUnit(metrology.UnitDef{
+		Dimension: fieldDimension, Symbol: symbol.Static("A/m"),
+	})
+	Oersted = metrology.MustUnit(metrology.UnitDef{
+		Dimension: fieldDimension, Symbol: symbol.Static("Oe"),
+		Numerator: "1000", Denominator: "4", Pi: -1,
+	})
 )
 
 var (
 	forceDimension    = dimension.New(dimension.Exponents{Length: 1, Mass: 1, Time: -2})
 	pressureDimension = dimension.New(dimension.Exponents{Length: -1, Mass: 1, Time: -2})
+	fieldDimension    = dimension.New(dimension.Exponents{Length: -1, ElectricCurrent: 1})
 )

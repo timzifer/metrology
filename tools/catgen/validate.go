@@ -152,6 +152,11 @@ func canonicalKey(u unitSpec) string {
 	return u.dimension().dimensionExpr() + "\x00" + u.kindExpr() + "\x00" + u.quantityTag()
 }
 
+// maxPiExponent is the largest π exponent the catalogue admits. The square
+// degree is π², the oersted is π⁻¹, and nothing in the standards reaches
+// further; a catalogue entry past this is a mistake, not a unit.
+const maxPiExponent = 2
+
 // validateFactor checks what [metrology.NewUnit] would check, before the
 // generated code exists to check it at run time.
 func validateFactor(u unitSpec) error {
@@ -169,6 +174,12 @@ func validateFactor(u unitSpec) error {
 	}
 	if num.Sign() == 0 || den.Sign() == 0 {
 		return fmt.Errorf("factor %s/%s is zero", num, den)
+	}
+	// D20: the exponent is stored in an int8 and the run time refuses more.
+	// No definition needs a third power of π, so the bound here is the one
+	// the catalogue can justify rather than the one the field can hold.
+	if u.Factor.Pi < -maxPiExponent || u.Factor.Pi > maxPiExponent {
+		return fmt.Errorf("π exponent %d is outside ±%d", u.Factor.Pi, maxPiExponent)
 	}
 	if offset.Sign() != 0 && !u.isAbsolute() {
 		return fmt.Errorf("offset %s on an interval unit; an offset makes a scale affine", offset)

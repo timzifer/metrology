@@ -211,9 +211,9 @@ func TestNoAliasing(t *testing.T) {
 	})
 
 	t.Run("a unit does not hand out its own factor", func(t *testing.T) {
-		num, den := Torr.Factor()
-		num.Coeff.SetInt64(1)
-		den.Coeff.SetInt64(1)
+		factor := Torr.Factor()
+		factor.Num.Coeff.SetInt64(1)
+		factor.Den.Coeff.SetInt64(1)
 		offset := Celsius.Offset()
 		offset.Coeff.SetInt64(0)
 

@@ -8,6 +8,7 @@ import (
 	"github.com/timzifer/metrology/catalog"
 	"github.com/timzifer/metrology/units/absorbeddose"
 	"github.com/timzifer/metrology/units/activity"
+	"github.com/timzifer/metrology/units/angle"
 	"github.com/timzifer/metrology/units/area"
 	"github.com/timzifer/metrology/units/customary"
 	"github.com/timzifer/metrology/units/customary/imperial"
@@ -16,6 +17,7 @@ import (
 	"github.com/timzifer/metrology/units/dose"
 	"github.com/timzifer/metrology/units/duration"
 	"github.com/timzifer/metrology/units/energy"
+	"github.com/timzifer/metrology/units/fieldstrength"
 	"github.com/timzifer/metrology/units/fluxdensity"
 	"github.com/timzifer/metrology/units/force"
 	"github.com/timzifer/metrology/units/kinematicviscosity"
@@ -128,6 +130,13 @@ func TestNISTConversionFactors(t *testing.T) {
 		{"twelve inches are a foot", customary.Inch.Of(12), customary.Foot, "1"},
 		{"sixteen ounces are a pound", customary.Ounce.Of(16), customary.Pound, "1"},
 		{"1760 yards are a mile", customary.Yard.Of(1760), customary.Mile, "1"},
+
+		// --- The π units, where the exponents cancel and nothing rounds (D20)
+		{"a degree is 3600 arcseconds", angle.Degree.Of(1), angle.Arcsecond, "3600"},
+		{"an arcminute is 60 arcseconds", angle.Arcminute.Of(1), angle.Arcsecond, "60"},
+		{"a gon is nine tenths of a degree", angle.Gon.Of(1), angle.Degree, "0.9"},
+		{"a right angle is 100 gon", angle.Degree.Of(90), angle.Gon, "100"},
+		{"a parsec is 648000/π astronomical units", length.Parsec.Of(1), length.AstronomicalUnit, "206264.806247096355156"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.from.To(tc.to)
@@ -181,6 +190,44 @@ func TestEveryUnitRoundTripsThroughItsCanonicalUnit(t *testing.T) {
 				assertAgrees(t, back, start, 18)
 			})
 		}
+	}
+}
+
+// The units defined through π, against the digits NIST SP 811 prints for them.
+//
+// The comparison stops where the standard does. Every other factor in this
+// catalogue is a fraction and the table above can check eighteen digits of it;
+// π is irrational, the standard rounds it to seven, and demanding more here
+// would be demanding that the printed table be something it is not. The digits
+// past the seventh are checked elsewhere and against a better source: the
+// constant itself against Machin's formula in internal/pi, and the conversion
+// against the same conversion at sixty digits in the core.
+func TestNISTConversionFactorsThroughPi(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		from metrology.Measurement
+		to   metrology.Unit
+		want string
+	}{
+		{"degree", angle.Degree.Of(1), angle.Radian, "1.745329E-02"},
+		{"minute of arc", angle.Arcminute.Of(1), angle.Radian, "2.908882E-04"},
+		{"second of arc", angle.Arcsecond.Of(1), angle.Radian, "4.848137E-06"},
+		{"grade", angle.Gon.Of(1), angle.Radian, "1.570796E-02"},
+		{"oersted", fieldstrength.Oersted.Of(1), fieldstrength.AmperePerMetre, "7.957747E+01"},
+		{"parsec", length.Parsec.Of(1), length.Metre, "3.085678E+16"},
+		{"astronomical unit", length.AstronomicalUnit.Of(1), length.Metre, "1.495979E+11"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.from.To(tc.to)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			want, err := tc.to.OfString(tc.want)
+			if err != nil {
+				t.Fatalf("the expected value is not a number: %v", err)
+			}
+			assertAgrees(t, got, want, 7)
+		})
 	}
 }
 
