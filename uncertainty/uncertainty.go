@@ -29,9 +29,11 @@
 // [apd.RoundFloor] and every upper bound with [apd.RoundCeiling], through
 // [metrology.Engine.Rounding].
 //
+// # The zero value
+//
 // The zero Range is not a range: its unit is the zero [metrology.Unit], which
 // has no scale, exactly as the zero [metrology.Measurement] has none. Build one
-// with [Of], [Between] or [Symmetric].
+// with [Of], [Between] or [Symmetric], or read one with [Parse].
 package uncertainty
 
 import (
