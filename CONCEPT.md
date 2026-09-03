@@ -533,6 +533,43 @@ reason a product of a product is flattened on construction: it already rendered
 flat, so keeping the nesting left two structures for one symbol and made
 `Symbol.Equal` answer false for two symbols that print alike.
 
+The same rule reaches one place it had missed: a **quotient in any but the first
+place of a product brackets itself**. `N·m/s` reads back as `(N·m)/s`, so a
+product of a newton and a metre-per-second has to render `N·(m/s)` or it renders
+a unit it is not. The first multiplicand needs none — `m/s·N` already reads as
+`(m/s)·N`, which is what it is. This went unnoticed while `m·m²/s` read back as
+a product of `m` and `m²` and rendered the same string again: two structures for
+one spelling, which is the defect the flattening rule above describes, hiding
+the wrong spelling underneath it.
+
+**Repeated prefixable factors gather into a power.** `Times` used to spell
+`m·m` where `Pow` spelled `m²`, and the two are one scale. That is not a
+cosmetic difference: `Unit.Equal` compares symbols, so `m.Times(m)` was *not*
+the square metre; the substitution below looks the rendered symbol up in the
+catalogue, so `m·m/s` missed `m²/s` and a magnitude lost the quantity tag of D6
+to a notation. `Symbol.Product` now adds the powers of repeated multiplicands —
+`m·m` is `m²`, `m²·m` is `m³`, `N·m` is untouched — and a base that cancels to
+the zeroth power drops out.
+
+**Only a prefixable symbol gathers**, and the restriction is what makes the rule
+sound rather than merely nice. An SI symbol records its power as a number, so a
+power can be added to it and taken off again. Every other form carries its power
+in its text — `Pow` of a static torr is the static `"torr²"` — and a static that
+has been raised cannot be recognised as a power of anything afterwards.
+Gathering those renders `1·1·1` as `1²·1`, then `1²·1²`, then `(1²)²`: a
+spelling that reads back as a different symbol every time it is written. The
+fuzzer found that within thirty seconds of the rule being written without the
+restriction, and the input is in the corpus.
+
+**Where the gathering stops.** It normalises a *spelling*, never a *name*. Two
+limits follow and both are deliberate. A quotient does not cancel: `mm/m` is a
+strain and `1` is not what an engineer asked to see, so `m/m` stays `m/m`. And
+`m²·s⁻¹` is the same scale as `m²/s` and still reads back untagged, because the
+substitution is a lookup of the rendered symbol and `m²·s⁻¹` is not a spelling
+the catalogue holds. Widening it to *any* known unit of the same scale would
+turn `kg·m/s²` into `N`, and D6 is explicit that a product of a force and a
+length is not a torque until someone says so.
+
 **An expression that spells a unit the parser knows *is* that unit.** `m²/ s` and
 `m²/s` differ by a blank, and without this substitution only the second would
 carry the quantity tag of D6. The substitution checks the scale and not only the

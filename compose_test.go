@@ -34,6 +34,39 @@ func TestUnitTimes(t *testing.T) {
 	}
 }
 
+// A product of a unit with itself is the unit squared, and squared is what Pow
+// answers: one scale has one spelling, so the two agree and both equal the
+// catalogue entry (D12). Before they gathered, m·m and m² were the same scale
+// under two names, and only one of them read back as the catalogue unit.
+func TestTimesGathersIntoAPower(t *testing.T) {
+	squared, err := Metre.Times(Metre)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := squared.String(), "m²"; got != want {
+		t.Errorf("m times m = %q, want %q", got, want)
+	}
+	powered, err := Metre.Pow(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !squared.Equal(powered) {
+		t.Errorf("m·m = %s and m² = %s are not the same unit", squared, powered)
+	}
+	if !squared.Equal(SquareMetre) {
+		t.Errorf("m times m = %s, not the square metre", squared)
+	}
+	// The gathering is on the symbol and changes no number: a square metre is
+	// still a square metre.
+	cubed, err := squared.Times(Metre)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cubed.String(), "m³"; got != want {
+		t.Errorf("m² times m = %q, want %q", got, want)
+	}
+}
+
 func TestUnitPer(t *testing.T) {
 	pressure, err := Newton.Per(SquareMetre)
 	if err != nil {

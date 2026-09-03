@@ -84,6 +84,14 @@ func Litre() Symbol {
 // and the rendering is flat either way, so keeping the nesting would leave two
 // structures for one symbol — and [Symbol.Equal], which promises that two
 // symbols rendering alike are alike, would have to answer false for them.
+//
+// Repeated prefixable multiplicands gather into a power for the same reason one
+// level down: m·m and m² are one scale spelled twice, and a spelling that
+// differs is a unit that differs — [Symbol.Equal] answers false, the parser's
+// substitution misses the catalogue entry, and a magnitude loses the quantity
+// tag of D6 to a difference in notation. The gathering makes Times agree with
+// Pow, which is what the two ought to have agreed on all along (D12). Only a
+// prefixable symbol gathers; see gather for why.
 func Product(multiplicands ...Symbol) Symbol {
 	parts := make([]Symbol, 0, len(multiplicands))
 	for _, m := range multiplicands {
@@ -93,7 +101,57 @@ func Product(multiplicands ...Symbol) Symbol {
 		}
 		parts = append(parts, m)
 	}
+	parts = gather(parts)
+	switch {
+	case len(parts) == 1:
+		// One multiplicand is not a product, it is that multiplicand. Wrapping
+		// it would be a second structure for one rendering again.
+		return parts[0]
+	case len(parts) == 0 && len(multiplicands) != 0:
+		// Everything cancelled — m·m⁻¹ — and the dimensionless one is spelled
+		// the way [Symbol.Pow] spells it.
+		return Static("1")
+	}
 	return Symbol{form: formProduct, parts: parts}
+}
+
+// gather folds repeated multiplicands into powers, keeping each base where it
+// first appeared: m·m is m², m²·m is m³, and N·m is left alone. A base that
+// cancels to the zeroth power drops out rather than rendering as a factor of
+// one.
+//
+// Only a prefixable symbol gathers, and that restriction is the whole of what
+// makes this sound. An SI symbol records its power as a number, so a power can
+// be added to it and taken off again. Every other form carries its power in its
+// text — [Symbol.Pow] of a static torr is the static "torr²" — and a static
+// that has been raised cannot be recognised as a power of anything afterwards.
+// Gathering those would render 1·1·1 as 1²·1, then as 1²·1², then as (1²)²:
+// a spelling that reads back as a different symbol every time it is written.
+// The fuzzer of D12 found exactly that, which is why it is stated here.
+func gather(parts []Symbol) []Symbol {
+	merged := make([]Symbol, 0, len(parts))
+	at := map[string]int{}
+	for _, p := range parts {
+		if p.form != formSI {
+			merged = append(merged, p)
+			continue
+		}
+		if i, seen := at[p.text]; seen {
+			merged[i] = SIPow(p.text, merged[i].power+p.power)
+			continue
+		}
+		at[p.text] = len(merged)
+		merged = append(merged, p)
+	}
+	out := make([]Symbol, 0, len(merged))
+	for _, p := range merged {
+		if p.form == formSI && p.power == 0 {
+			// m·m⁻¹ cancelled, and a factor of one is not written down.
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // Quotient returns the symbol of a quotient, rendered m/s. A prefix attaches to
@@ -127,11 +185,25 @@ func powerSuffix(power int) string {
 	return superscript.Itoa(power)
 }
 
-// partStrings renders every part of a product.
+// partStrings renders every part of a product, bracketing any but the first
+// that carries a solidus of its own.
+//
+// A solidus and a middle dot bind equally and from the left (D12), so a·b/c
+// reads back as (a·b)/c — and a product whose second multiplicand is a quotient
+// has to say so, or it renders as a unit it is not. The first multiplicand
+// needs no brackets: a/b·c already reads as (a/b)·c, which is what it is.
+//
+// Before repeated multiplicands gathered into powers this went unnoticed,
+// because m·m²/s read back as a product of m and m² and rendered the same
+// string again. It was two structures for one spelling then and a wrong
+// spelling now; the bracket is the fix for both.
 func (s Symbol) partStrings() []string {
 	out := make([]string, len(s.parts))
 	for i, p := range s.parts {
 		out[i] = p.String()
+		if i > 0 && strings.ContainsRune(out[i], '/') {
+			out[i] = "(" + out[i] + ")"
+		}
 	}
 	return out
 }
