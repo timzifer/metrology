@@ -8,9 +8,10 @@ package silent
 
 import (
 	"github.com/timzifer/metrology"
+	"github.com/timzifer/metrology/dimension"
+	"github.com/timzifer/metrology/symbol"
 	"github.com/timzifer/metrology/units/activity"
 	"github.com/timzifer/metrology/units/angle"
-	"github.com/timzifer/metrology/dimension"
 	"github.com/timzifer/metrology/units/duration"
 	"github.com/timzifer/metrology/units/frequency"
 	"github.com/timzifer/metrology/units/interval"
@@ -18,7 +19,6 @@ import (
 	"github.com/timzifer/metrology/units/pressure"
 	"github.com/timzifer/metrology/units/ratio"
 	"github.com/timzifer/metrology/units/solidangle"
-	"github.com/timzifer/metrology/symbol"
 	"github.com/timzifer/metrology/units/temperature"
 )
 
