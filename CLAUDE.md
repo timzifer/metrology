@@ -37,6 +37,11 @@ where `catgen` writes it; nothing chooses the directory by hand. One package to 
 provenance and not a quantity — `units/imperial` (D19), several dimensions in
 one package — and it is the only one the one-dimension rule does not apply to.
 
+A customary unit that the US and imperial systems disagree about does **not** go
+in yet — that is O3, and a second package would not help, because the symbol
+index of D12 is global and two units spelling `gal` are rejected wherever they
+live.
+
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
 `source:`; the generator rejects one without. A group with a `quantity:` also
