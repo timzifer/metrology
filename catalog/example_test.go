@@ -62,7 +62,7 @@ func ExampleBySymbol_kind() {
 
 func ExampleUnits() {
 	fmt.Println(len(catalog.Units()), "units in the catalogue")
-	// Output: 82 units in the catalogue
+	// Output: 96 units in the catalogue
 }
 
 func ExampleCanonical_quantity() {

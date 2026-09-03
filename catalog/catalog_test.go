@@ -11,6 +11,8 @@ import (
 	"github.com/timzifer/metrology/units/activity"
 	"github.com/timzifer/metrology/units/angle"
 	"github.com/timzifer/metrology/units/area"
+	"github.com/timzifer/metrology/units/customary/imperial"
+	"github.com/timzifer/metrology/units/customary/us"
 	"github.com/timzifer/metrology/units/dose"
 	"github.com/timzifer/metrology/units/energy"
 	"github.com/timzifer/metrology/units/force"
@@ -302,5 +304,43 @@ func TestQuotientResolvesThroughTheCatalogue(t *testing.T) {
 	}
 	if named.String() != "50 Pa" {
 		t.Errorf("got %s, want 50 Pa", named)
+	}
+}
+
+// An ambiguous spelling names no unit (O3). "gal" is a US gallon in one country
+// and an imperial gallon a fifth larger in another, and the two are in this
+// catalogue under spellings that say which — so the bare one resolves to
+// nothing rather than to whichever entry happened to be written first.
+//
+// The text form of D12 is a canonical form only where a symbol names one unit.
+// Refusing a spelling the world uses for two things is the same choice D6 makes
+// for a quantity tag and D13 for a dimension it cannot prove: say nothing rather
+// than say something wrong.
+func TestAnAmbiguousSpellingNamesNoUnit(t *testing.T) {
+	for _, text := range []string{"gal", "fl oz", "ton"} {
+		if u, ok := catalog.BySymbol(text, metrology.Interval); ok {
+			t.Errorf("%q resolves to %s; it names two units a system apart", text, u)
+		}
+	}
+
+	// What the two are spelled instead, and that they are two.
+	if us.Gallon.Equal(imperial.Gallon) {
+		t.Error("the US and imperial gallons are the same unit")
+	}
+	for _, tc := range []struct {
+		unit metrology.Unit
+		want string
+	}{
+		{us.Gallon, "galUS"},
+		{imperial.Gallon, "galImp"},
+		{us.Ton, "tonUS"},
+		{imperial.Ton, "tonImp"},
+	} {
+		if got := tc.unit.String(); got != tc.want {
+			t.Errorf("symbol = %q, want %q", got, tc.want)
+		}
+		if _, ok := catalog.BySymbol(tc.want, metrology.Interval); !ok {
+			t.Errorf("%q resolves to no unit", tc.want)
+		}
 	}
 }

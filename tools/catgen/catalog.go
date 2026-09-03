@@ -15,11 +15,24 @@ type catalogue struct {
 }
 
 // quantity is one generated package: a dimension and the units measuring it.
+//
+// Or, for the one package that is a provenance rather than a quantity, several
+// dimensions and the units that share where they come from — see Group and D19.
 type quantity struct {
 	Package   string     `yaml:"package"`
 	Doc       string     `yaml:"doc"`
 	Dimension exponents  `yaml:"dimension"`
 	Units     []unitSpec `yaml:"units"`
+
+	// Group is what the units of this package have in common: "quantity", the
+	// default and the case for every SI package, or "provenance" for
+	// units/imperial, where the common thread is where the units come from and
+	// the dimensions differ per unit (D19).
+	//
+	// It is spelled out rather than inferred from whether a dimension was
+	// given, because a package holding two dimensions by accident is a defect
+	// the generator has always caught and should keep catching.
+	Group string `yaml:"group"`
 
 	// Quantity names what these units measure, where the dimension is shared
 	// by more than one quantity: frequency and radioactivity are both T⁻¹.
@@ -55,8 +68,31 @@ type unitSpec struct {
 	Interval  string     `yaml:"interval"`
 	Source    string     `yaml:"source"`
 
+	// Dimension is what this unit measures, for a provenance group where the
+	// package does not have one of its own. Nil in a quantity group, where the
+	// dimension is the package's (D19).
+	Dimension *exponents `yaml:"dimension"`
+
 	// quantity is filled in during validation; the YAML does not repeat it.
 	quantity *quantity
+}
+
+// groupProvenance is the Group of the one package whose units share where they
+// come from rather than what they measure (D19).
+const groupProvenance = "provenance"
+
+// isProvenance reports whether this package groups its units by where they come
+// from. Everything else groups by quantity, which is the default and the case
+// for every package generated from the SI catalogue.
+func (q quantity) isProvenance() bool { return q.Group == groupProvenance }
+
+// dimension is what a unit measures: its own where the package has none, and
+// the package's otherwise.
+func (u unitSpec) dimension() exponents {
+	if u.Dimension != nil {
+		return *u.Dimension
+	}
+	return u.quantity.Dimension
 }
 
 // factorSpec is the exact fraction relating a unit to the base unit (D4). Both
@@ -76,7 +112,19 @@ type symbolSpec struct {
 }
 
 // qualified is the Go expression referring to a unit from outside its package.
-func (u unitSpec) qualified() string { return u.quantity.Package + "." + u.Go }
+func (u unitSpec) qualified() string { return u.quantity.name() + "." + u.Go }
+
+// name is the Go package name: the last element of the package path.
+//
+// The two differ only where a package sits below another — units/customary/us
+// is imported from that path and written us.Gallon (D19). Everywhere else the
+// path is one element and the two are the same string.
+func (q quantity) name() string {
+	if i := strings.LastIndex(q.Package, "/"); i >= 0 {
+		return q.Package[i+1:]
+	}
+	return q.Package
+}
 
 // unitsDir is the directory the generated quantity packages live in, below the
 // module root: github.com/timzifer/metrology/units/pressure (D18). It is data,

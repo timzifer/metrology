@@ -95,6 +95,77 @@ quantities:
 			want: `duplicate symbol "Pa"`,
 		},
 		{
+			// D19: a package is one group, and where the group is a quantity
+			// the one-dimension rule still fires.
+			name: "a quantity package with two dimensions",
+			yaml: `
+quantities:
+  - package: pressure
+    dimension: {mass: 1, length: -1, time: -2}
+    units:
+      - {id: pascal, go: Pascal, canonical: true, symbol: {form: si, text: Pa}, source: s}
+  - package: pressure
+    dimension: {length: 1}
+    units:
+      - {id: metre, go: Metre, canonical: true, symbol: {form: si, text: m}, source: s}
+`,
+			want: "declares two dimensions",
+		},
+		{
+			name: "a unit in a quantity package that declares its own dimension",
+			yaml: `
+quantities:
+  - package: pressure
+    dimension: {mass: 1, length: -1, time: -2}
+    units:
+      - {id: pascal, go: Pascal, canonical: true, dimension: {length: 1}, symbol: {form: si, text: Pa}, source: s}
+`,
+			want: "declares a dimension, but package",
+		},
+		{
+			name: "a unit in a provenance package without one",
+			yaml: `
+quantities:
+  - package: length
+    dimension: {length: 1}
+    units:
+      - {id: metre, go: Metre, canonical: true, symbol: {form: si, text: m}, source: s}
+  - package: imperial
+    group: provenance
+    units:
+      - {id: foot, go: Foot, symbol: {form: static, text: ft}, factor: {num: "3048", den: "10000"}, source: s}
+`,
+			want: "declares no dimension of its own",
+		},
+		{
+			name: "a group that is neither",
+			yaml: `
+quantities:
+  - package: pressure
+    group: something
+    dimension: {mass: 1, length: -1, time: -2}
+    units:
+      - {id: pascal, go: Pascal, canonical: true, symbol: {form: si, text: Pa}, source: s}
+`,
+			want: "unknown group",
+		},
+		{
+			name: "a provenance package with one quantity tag",
+			yaml: `
+quantities:
+  - package: length
+    dimension: {length: 1}
+    units:
+      - {id: metre, go: Metre, canonical: true, symbol: {form: si, text: m}, source: s}
+  - package: imperial
+    group: provenance
+    quantity: length
+    units:
+      - {id: foot, go: Foot, dimension: {length: 1}, symbol: {form: static, text: ft}, factor: {num: "3048", den: "10000"}, source: s}
+`,
+			want: "cannot carry one quantity tag",
+		},
+		{
 			name: "two canonical units for one dimension and kind",
 			yaml: `
 quantities:

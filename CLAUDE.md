@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D18 and referenced
+more importantly, the reasoning — decisions are numbered D1 … D19 and referenced
 from code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
 `CONCEPT.md` and the code is the failure mode to avoid.
@@ -13,7 +13,8 @@ dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
 **The library is complete for its stated scope.** The core computes, the
-catalogue holds 82 units across 43 quantity packages — all seven SI base units,
+catalogue holds 82 units across 43 quantity packages, plus 14 customary units in
+`units/customary` (D19) — all seven SI base units,
 all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
 and writes (`metrology` writes, `parse` reads), and `unitvet` checks dimensions
@@ -32,7 +33,17 @@ not what D15 describes.
 The generated quantity packages live under `units/` (D18) —
 `units/pressure`, `units/temperature`. The seven hand-written packages stay at
 the module root. A new quantity package goes under `units/` because that is
-where `catgen` writes it; nothing chooses the directory by hand.
+where `catgen` writes it; nothing chooses the directory by hand. One package to come is a
+provenance and not a quantity — `units/customary` (D19), several dimensions in
+one package — and it is the only one the one-dimension rule does not apply to.
+
+A customary unit the two systems disagree about goes in `units/customary/us` or
+`units/customary/imperial`, and **neither claims the bare spelling**: `gal` names
+two units a fifth apart, so it names none here (D19/O3). The symbol index is
+global — `catgen` keys it by spelling and kind with no package in the key — so
+a second package would not have made a second namespace. Never add a symbol
+containing a space either: `parse` treats a blank as a separator so that
+`m² / s` off a data sheet reads.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
