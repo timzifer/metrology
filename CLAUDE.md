@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D16 and referenced
+more importantly, the reasoning — decisions are numbered D1 … D17 and referenced
 from code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
 `CONCEPT.md` and the code is the failure mode to avoid.
@@ -178,11 +178,13 @@ error branch that cannot fire usually means the error cannot occur.
   `CONCEPT.md` — the benchmark data is there; going higher costs measurably and
   buys nothing for physical measurements. decimal128 is one `NewEngine(34)` away.
 - There is no swappable arithmetic and no float-backed fast mode, and there will
-  not be one: O2 in `CONCEPT.md` measures a facade over the operations as
+  not be one: D17 measures a facade over the operations as
   *slower* than the decimals it replaces, because the representation is where the
   time is, and a loop that leaves its units at the boundary beats every variant
   of it anyway. `BenchmarkKernel` is that comparison; run it before proposing one
-  again. What O2 does *not* refuse is the adaptive fast path — an `int64`
+  again. This one is decided, not open — `Measurement` and `Unit` stay concrete
+  single-arithmetic types, and that is a `v1.0.0` promise. What D17 does *not*
+  refuse is the adaptive fast path — an `int64`
   coefficient in place of a decimal where the value fits one, promoting to apd
   where it does not. That one is measured favourably and stays open, on three
   conditions: an integer and never a float, because the shortcut has to compute
