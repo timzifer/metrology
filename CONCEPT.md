@@ -514,6 +514,35 @@ from the catalogue entry the symbol resolves to. An expression such as `"50 N/m�
 resolves to no catalogue entry and is therefore untagged, which is what a
 computed magnitude is too (D6), so it converts into any unit of its dimension.
 
+**The spelling is the statement**, and that is the answer to the last of the
+three questions section 7 asked about `Quantity` (D16). `"50 Hz"` reads back
+tagged and `"50 s⁻¹"` untagged, for one scale, and the asymmetry is honest
+rather than accidental: someone who writes `Hz` means a frequency, and someone
+who writes `s⁻¹` has written a rate and said nothing about which quantity it is.
+Untagged is not a failure to determine the tag — it is the correct reading of a
+text that made no claim.
+
+The alternatives were worse. Resolving by scale rather than by spelling would
+name `kg·m/s²` a newton, and D6 is explicit that a product of a force and a
+length is not a torque until someone says so. Carrying the tag in the text needs
+a notation that no gauge, no standard and no other program writes, and section 8
+is where that waits. An asymmetry that can be stated in one sentence beats
+either.
+
+**A reader with an expectation states it, and the API already has one way to.**
+
+```go
+m, err := parse.Measurement(text)     // whatever the text said
+hz, err := m.To(frequency.Hertz)      // a frequency in hertz, or an error
+```
+
+`To` is the checked step D6 requires everywhere else: an untagged magnitude goes
+in and a tagged one comes out, a conflicting tag is an error rather than a
+silent reinterpretation, and a wrong dimension is an error too. A program that
+expects hertz gets hertz or gets told, whichever spelling arrived. There is
+deliberately no second name for it — an API about to be frozen (section 7) is
+the worst place to grow a synonym for an operation it already has.
+
 **A symbol's spellings are enumerated, never guessed.** `Symbol.Spellings`
 reports every way a symbol may be written and the parser indexes exactly those. A
 static symbol admits no prefix at all, and a prefix is only ever read in front of
@@ -1001,11 +1030,12 @@ still two namespaces, and D6's compatibility rule still compares spellings
 across them — but each side now has one place where its spelling is written
 down, which is what makes a collision something a person can look up.
 
-**What it does not settle.** One question from section 7 stays open, and it is
-the text boundary of D12: `50 Hz` reads back tagged and `50 s⁻¹` reads back
-untagged for the same scale, because the text form cannot carry a tag of its own
-(section 8). D16 says what the tag is and who owns the spelling; how it survives
-serialisation is still a v1 question.
+**What it leaves to D12.** The third question section 7 asked — what untagged
+means crossing the text boundary — is answered there, and answered by leaving it
+alone: `50 Hz` reads back tagged and `50 s⁻¹` untagged for one scale, because
+the spelling is the statement and a text that made no claim should not have one
+invented for it. D16 says what the tag is and who owns the spelling; D12 says
+what a text carrying none of it means.
 
 ### D17 — One arithmetic, and a fast path made of integers
 
@@ -1461,7 +1491,9 @@ Everything the decisions describe is implemented and enforced:
 **What remains before `v1.0.0` is a deliberate API review.** Until it happens the
 module is tagged `v0.x` and the API may change without notice; any stability
 promise made before the review is one to regret later. The review has to settle,
-at minimum:
+at minimum — items already settled are struck through rather than deleted, so
+that a reader who remembers the question finds the answer where the question
+was:
 
 - the exported surface of `metrology` — which of `Times`, `Per`, `Pow`, `Prefixed`,
   `DecimalIn` and the `Engine` methods are load-bearing enough to freeze
@@ -1469,29 +1501,25 @@ at minimum:
   the substitute for a compile error
 - whether `parse.Text` is the right shape for the decoding boundary, or whether a
   parser-typed destination generated per catalogue would serve better
-- what `Quantity` promises. **Two of its three questions are answered** (D16),
-  and one is left. **Is a quantity part of a unit's identity or an
-  interpretation of it?** Identity. A hertz is not a becquerel; the run time
-  refuses the conflict in every additive operation and every conversion, and
-  `unitvet` now follows the tag through the products that drop it. The type
-  stays a `string`, because the catalogue is data (D8) and the set of quantities
-  is open — ten of the eighty-two units carry a tag.
-  **Whose namespace is it? Answered with the first** (D16): the tags this module
-  ships are reserved names of *this catalogue*, and every tagged package now
-  declares one — `frequency.Quantity` — with the unit definitions generated from
-  the same constant. They are not reserved names of the *type*: `Quantity` stays
-  a `string`, and a caller's catalogue declares its own. Two catalogues in one
-  program may still tag one dimension differently, and D6's rule still compares
-  spellings across them; what changed is that each side has one place where its
-  spelling is written down.
-  **What does untagged mean at a boundary?** Inside the core it is the wildcard
-  that keeps a computed magnitude nameable, and that is settled — D16 says why,
-  and moves the enforcement the wildcard gives up into the static checker.
-  Crossing D12 it
-  is what an expression carries when no catalogue entry spells it: `50 Hz` reads
-  back tagged `frequency`, `50 s⁻¹` reads back untagged, and the two are the same
-  scale. The text form cannot carry a tag of its own (section 8), so the spelling
-  decides — which is a v1 question rather than a later one.
+- ~~what `Quantity` promises~~ — **settled, and kept here so the answers stay
+  findable.** **Identity or interpretation?** Identity (D16): a hertz is not a
+  becquerel, the run time refuses the conflict in every additive operation and
+  every conversion, and `unitvet` follows the tag through the products that drop
+  it. The type stays a `string`, because the catalogue is data (D8) and the set
+  of quantities is open — ten of the eighty-two units carry a tag.
+  **Whose namespace?** This catalogue's (D16). Every tagged package declares its
+  own constant — `frequency.Quantity` — and the unit definitions are generated
+  from it. Not the *type's*: a caller's catalogue declares its own tags, two
+  catalogues in one program may still tag a dimension differently, and D6's rule
+  still compares spellings across them. What changed is that each side has one
+  place where its spelling is written down.
+  **What does untagged mean at a boundary?** Inside the core, the wildcard that
+  keeps a computed magnitude nameable, with the enforcement it gives up moved
+  into the static checker (D16). Crossing the text form, the spelling is the
+  statement (D12): `50 Hz` reads back tagged, `50 s⁻¹` untagged, one scale and
+  two readings, because a text that made no claim should not have one invented
+  for it. A caller with an expectation converts — `m.To(frequency.Hertz)` — which
+  returns hertz or an error, whichever spelling arrived.
 - whether `Engine.Rounding` belongs in the frozen surface. D15 needs it — an
   interval bound has to round outward, or a conversion can manufacture a
   disagreement that stands in no source — and it is the one addition to the core

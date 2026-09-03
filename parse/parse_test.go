@@ -11,6 +11,7 @@ import (
 	"github.com/timzifer/metrology/symbol"
 	"github.com/timzifer/metrology/units/duration"
 	"github.com/timzifer/metrology/units/energy"
+	"github.com/timzifer/metrology/units/frequency"
 	"github.com/timzifer/metrology/units/interval"
 	"github.com/timzifer/metrology/units/length"
 	"github.com/timzifer/metrology/units/mass"
@@ -221,6 +222,53 @@ func TestQuantityTags(t *testing.T) {
 	// Untagged converts into the tagged unit; that is what the empty tag is for.
 	if _, err := computed.To(tagged.Unit()); err != nil {
 		t.Errorf("naming a computed magnitude: %v", err)
+	}
+}
+
+// The spelling is the statement (D12): "50 Hz" reads back a frequency and
+// "50 s⁻¹" reads back a rate that says nothing about which quantity it is. They
+// are one scale and two readings, and the reading a caller wanted is the one
+// the caller asks for — To is the step that asks, and the step that refuses.
+func TestTheSpellingIsTheStatement(t *testing.T) {
+	tagged, err := parse.Measurement("50 Hz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := tagged.Quantity(), frequency.Quantity; got != want {
+		t.Errorf("quantity of %q = %q, want %q", "50 Hz", got, want)
+	}
+
+	// The same scale, spelled without naming a quantity.
+	bare, err := parse.Measurement("50 s⁻¹")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := bare.Quantity(); got != "" {
+		t.Errorf("quantity of %q = %q, want the empty one", "50 s⁻¹", got)
+	}
+	if cmp, err := bare.Cmp(tagged); err != nil || cmp != 0 {
+		t.Errorf("50 s⁻¹ against 50 Hz: cmp = %d, err = %v", cmp, err)
+	}
+
+	// A reader with an expectation states it, and gets it whichever spelling
+	// arrived.
+	named, err := bare.To(frequency.Hertz)
+	if err != nil {
+		t.Fatalf("naming an untagged rate: %v", err)
+	}
+	if got, want := named.Quantity(), frequency.Quantity; got != want {
+		t.Errorf("quantity after To = %q, want %q", got, want)
+	}
+
+	// And a text that made a different claim is refused rather than
+	// reinterpreted: this is the whole reason the tag is identity (D16).
+	becquerel, err := parse.Measurement("50 Bq")
+	if err != nil {
+		t.Fatal(err)
+	}
+	//unitvet:ignore the assertion is that this conversion fails
+	if _, err := becquerel.To(frequency.Hertz); !errors.Is(err, metrology.ErrQuantity) {
+		t.Errorf("50 Bq named as hertz: %v", err)
 	}
 }
 
