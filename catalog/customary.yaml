@@ -20,11 +20,15 @@
 #     D4 was written against, and the generator refuses an entry without a
 #     source anyway (D8).
 quantities:
-  - package: imperial
+  - package: customary
     group: provenance
     doc: |
-      Package imperial holds the customary units — the foot, the pound, the
-      pound-force, the pound per square inch.
+      Package customary holds the units the two customary systems agree on —
+      the foot, the pound, the pound-force, the pound per square inch.
+
+      Where they disagree, the unit is in customary/us or customary/imperial
+      instead: the gallons differ by a fifth, and a package that held both
+      under one name would be a name contradicting a definition (D19).
 
       It is the one generated package grouped by provenance rather than by
       quantity (D19), so its units are on several dimensions and it declares no
@@ -93,4 +97,77 @@ quantities:
         doc: one pound-force on a square inch — the quotient is no finite decimal, which is what the exact fraction of D4 is for
         symbol: {form: static, text: psi}
         factor: {num: "4.4482216152605", den: "0.00064516"}
+        source: NIST SP 811 (2008), Appendix B.6
+
+  - package: customary/us
+    group: provenance
+    doc: |
+      Package us holds the customary units of the United States that differ
+      from the imperial ones of the same name.
+
+      Its counterpart is units/customary/imperial. The two are separate
+      packages so that us.Gallon and imperial.Gallon are two names rather than
+      one aliased twice, and the units they agree on are in the parent (D19).
+
+      None of these carries the bare spelling. "gal" names a US gallon in one
+      country and an imperial gallon a fifth larger in another, so it names no
+      unit here: the text form of D12 is a canonical form only where a symbol
+      resolves to one unit, and refusing an ambiguous spelling is better than
+      reading it back as the wrong one (O3). The spellings that are used
+      instead — galUS, flozUS, tonUS — are this library's, because no standard
+      supplies one.
+    units:
+      - id: gallon_us
+        go: Gallon
+        dimension: {length: 3}
+        doc: the US liquid gallon, 231 cubic inches, exactly 3.785411784 litres
+        symbol: {form: static, text: galUS}
+        factor: {num: "3785411784", den: "1000000000000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: fluid_ounce_us
+        go: FluidOunce
+        dimension: {length: 3}
+        doc: a hundred-and-twenty-eighth of a US gallon
+        symbol: {form: static, text: flozUS}
+        factor: {num: "3785411784", den: "128000000000000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: ton_short
+        go: Ton
+        dimension: {mass: 1}
+        doc: the short ton, two thousand pounds, exactly 907.18474 kilograms
+        symbol: {form: static, text: tonUS}
+        factor: {num: "90718474", den: "100000"}
+        source: NIST SP 811 (2008), Appendix B.6
+
+  - package: customary/imperial
+    group: provenance
+    doc: |
+      Package imperial holds the units of the imperial system that differ from
+      the United States ones of the same name.
+
+      Its counterpart is units/customary/us, and the units the two systems
+      agree on are in the parent, units/customary (D19). As there, none of
+      these carries the bare spelling: "gal" resolves to no unit in this
+      catalogue, because it names two that are a fifth apart (O3).
+    units:
+      - id: gallon_imperial
+        go: Gallon
+        dimension: {length: 3}
+        doc: the imperial gallon, exactly 4.54609 litres
+        symbol: {form: static, text: galImp}
+        factor: {num: "454609", den: "100000000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: fluid_ounce_imperial
+        go: FluidOunce
+        dimension: {length: 3}
+        doc: a hundred-and-sixtieth of an imperial gallon
+        symbol: {form: static, text: flozImp}
+        factor: {num: "454609", den: "16000000000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: ton_long
+        go: Ton
+        dimension: {mass: 1}
+        doc: the long ton, two thousand two hundred and forty pounds, exactly 1016.0469088 kilograms
+        symbol: {form: static, text: tonImp}
+        factor: {num: "10160469088", den: "10000000"}
         source: NIST SP 811 (2008), Appendix B.6

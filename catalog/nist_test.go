@@ -9,13 +9,15 @@ import (
 	"github.com/timzifer/metrology/units/absorbeddose"
 	"github.com/timzifer/metrology/units/activity"
 	"github.com/timzifer/metrology/units/area"
+	"github.com/timzifer/metrology/units/customary"
+	"github.com/timzifer/metrology/units/customary/imperial"
+	"github.com/timzifer/metrology/units/customary/us"
 	"github.com/timzifer/metrology/units/density"
 	"github.com/timzifer/metrology/units/dose"
 	"github.com/timzifer/metrology/units/duration"
 	"github.com/timzifer/metrology/units/energy"
 	"github.com/timzifer/metrology/units/fluxdensity"
 	"github.com/timzifer/metrology/units/force"
-	"github.com/timzifer/metrology/units/imperial"
 	"github.com/timzifer/metrology/units/kinematicviscosity"
 	"github.com/timzifer/metrology/units/length"
 	"github.com/timzifer/metrology/units/magneticflux"
@@ -100,23 +102,32 @@ func TestNISTConversionFactors(t *testing.T) {
 		// is not a finite decimal, which is why it is stored as the fraction it
 		// is defined by (D4) and compared here to more digits than a rounded
 		// factor could carry.
-		{"inch", imperial.Inch.Of(1), length.Metre, "0.0254"},
-		{"foot", imperial.Foot.Of(1), length.Metre, "0.3048"},
-		{"yard", imperial.Yard.Of(1), length.Metre, "0.9144"},
-		{"mile", imperial.Mile.Of(1), length.Metre, "1609.344"},
-		{"pound", imperial.Pound.Of(1), mass.Kilogram, "0.45359237"},
-		{"ounce", imperial.Ounce.Of(1), mass.Kilogram, "0.028349523125"},
-		{"pound-force", imperial.PoundForce.Of(1), force.Newton, "4.4482216152605"},
-		{"pound per square inch", imperial.PoundPerSquareInch.Of(1), pressure.Pascal,
+		{"inch", customary.Inch.Of(1), length.Metre, "0.0254"},
+		{"foot", customary.Foot.Of(1), length.Metre, "0.3048"},
+		{"yard", customary.Yard.Of(1), length.Metre, "0.9144"},
+		{"mile", customary.Mile.Of(1), length.Metre, "1609.344"},
+		{"pound", customary.Pound.Of(1), mass.Kilogram, "0.45359237"},
+		{"ounce", customary.Ounce.Of(1), mass.Kilogram, "0.028349523125"},
+		{"pound-force", customary.PoundForce.Of(1), force.Newton, "4.4482216152605"},
+		{"pound per square inch", customary.PoundPerSquareInch.Of(1), pressure.Pascal,
 			"6894.757293168361336722673445"},
+
+		// The two systems disagree about these, which is why they are in two
+		// packages and neither spells itself "gal" (O3).
+		{"US gallon", us.Gallon.Of(1), volume.CubicMetre, "0.003785411784"},
+		{"imperial gallon", imperial.Gallon.Of(1), volume.CubicMetre, "0.00454609"},
+		{"US fluid ounce", us.FluidOunce.Of(1), volume.CubicMetre, "0.0000295735295625"},
+		{"imperial fluid ounce", imperial.FluidOunce.Of(1), volume.CubicMetre, "0.0000284130625"},
+		{"short ton", us.Ton.Of(1), mass.Kilogram, "907.18474"},
+		{"long ton", imperial.Ton.Of(1), mass.Kilogram, "1016.0469088"},
 
 		// --- The exact ones, in the direction that exposes a rounded factor --
 		{"760 torr is one atmosphere", pressure.Torr.Of(760), pressure.Pascal, "101325"},
 		{"and back", pressure.Atmosphere.Of(1), pressure.Torr, "760"},
 		{"a gray is a joule per kilogram", absorbeddose.Gray.Of(1), absorbeddose.Gray, "1"},
-		{"twelve inches are a foot", imperial.Inch.Of(12), imperial.Foot, "1"},
-		{"sixteen ounces are a pound", imperial.Ounce.Of(16), imperial.Pound, "1"},
-		{"1760 yards are a mile", imperial.Yard.Of(1760), imperial.Mile, "1"},
+		{"twelve inches are a foot", customary.Inch.Of(12), customary.Foot, "1"},
+		{"sixteen ounces are a pound", customary.Ounce.Of(16), customary.Pound, "1"},
+		{"1760 yards are a mile", customary.Yard.Of(1760), customary.Mile, "1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.from.To(tc.to)

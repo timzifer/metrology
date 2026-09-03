@@ -66,7 +66,7 @@ func run(source, root, module string) error {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		path := filepath.Join(dir, q.Package+"_gen.go")
+		path := filepath.Join(dir, q.name()+"_gen.go")
 		if err := os.WriteFile(path, code, 0o644); err != nil {
 			return err
 		}

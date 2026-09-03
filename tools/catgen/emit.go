@@ -20,7 +20,7 @@ func emitQuantity(module string, q quantity, byID map[string]unitSpec) ([]byte, 
 	fmt.Fprintln(&b, header)
 	fmt.Fprintln(&b)
 	writeDoc(&b, q.Doc, "")
-	fmt.Fprintf(&b, "package %s\n\n", q.Package)
+	fmt.Fprintf(&b, "package %s\n\n", q.name())
 
 	imports := []string{
 		fmt.Sprintf("%q", module),
@@ -158,7 +158,7 @@ func emitIndex(module string, c *catalogue) ([]byte, error) {
 			continue
 		}
 		fmt.Fprintf(&b, "{dim: %s.%s.Dimension(), kind: %s, quantity: %q}: %s,\n",
-			u.quantity.Package, u.Go, u.kindExpr(), u.quantityTag(), u.qualified())
+			u.quantity.name(), u.Go, u.kindExpr(), u.quantityTag(), u.qualified())
 	}
 	fmt.Fprint(&b, "}\n\n")
 

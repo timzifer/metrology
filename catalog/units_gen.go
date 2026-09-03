@@ -15,6 +15,9 @@ import (
 	"github.com/timzifer/metrology/units/concentration"
 	"github.com/timzifer/metrology/units/conductance"
 	"github.com/timzifer/metrology/units/current"
+	"github.com/timzifer/metrology/units/customary"
+	"github.com/timzifer/metrology/units/customary/imperial"
+	"github.com/timzifer/metrology/units/customary/us"
 	"github.com/timzifer/metrology/units/density"
 	"github.com/timzifer/metrology/units/dose"
 	"github.com/timzifer/metrology/units/duration"
@@ -23,7 +26,6 @@ import (
 	"github.com/timzifer/metrology/units/force"
 	"github.com/timzifer/metrology/units/frequency"
 	"github.com/timzifer/metrology/units/illuminance"
-	"github.com/timzifer/metrology/units/imperial"
 	"github.com/timzifer/metrology/units/inductance"
 	"github.com/timzifer/metrology/units/interval"
 	"github.com/timzifer/metrology/units/kinematicviscosity"
@@ -73,7 +75,11 @@ var all = []metrology.Unit{
 	energy.Erg,                              // erg
 	temperature.Fahrenheit,                  // fahrenheit
 	capacitance.Farad,                       // farad
-	imperial.Foot,                           // foot
+	imperial.FluidOunce,                     // fluid_ounce_imperial
+	us.FluidOunce,                           // fluid_ounce_us
+	customary.Foot,                          // foot
+	imperial.Gallon,                         // gallon_imperial
+	us.Gallon,                               // gallon_us
 	fluxdensity.Gauss,                       // gauss
 	density.GramPerLitre,                    // gram_per_litre
 	absorbeddose.Gray,                       // gray
@@ -81,7 +87,7 @@ var all = []metrology.Unit{
 	inductance.Henry,                        // henry
 	frequency.Hertz,                         // hertz
 	duration.Hour,                           // hour
-	imperial.Inch,                           // inch
+	customary.Inch,                          // inch
 	energy.Joule,                            // joule
 	specificheat.JoulePerKilogramKelvin,     // joule_per_kilogram_kelvin
 	catalytic.Katal,                         // katal
@@ -102,7 +108,7 @@ var all = []metrology.Unit{
 	length.Metre,                            // metre
 	velocity.MetrePerSecond,                 // metre_per_second
 	acceleration.MetrePerSecondSquared,      // metre_per_second_squared
-	imperial.Mile,                           // mile
+	customary.Mile,                          // mile
 	pressure.MillimetreOfMercury,            // millimetre_of_mercury
 	pressure.MillimetreOfWater,              // millimetre_of_water
 	duration.Minute,                         // minute
@@ -113,15 +119,15 @@ var all = []metrology.Unit{
 	surfacetension.NewtonPerMetre,           // newton_per_metre
 	resistance.Ohm,                          // ohm
 	ratio.One,                               // one
-	imperial.Ounce,                          // ounce
+	customary.Ounce,                         // ounce
 	pressure.Pascal,                         // pascal
 	viscosity.PascalSecond,                  // pascal_second
 	ratio.Percent,                           // percent
 	ratio.PerMille,                          // permille
 	viscosity.Poise,                         // poise
-	imperial.Pound,                          // pound
-	imperial.PoundForce,                     // pound_force
-	imperial.PoundPerSquareInch,             // pound_per_square_inch
+	customary.Pound,                         // pound
+	customary.PoundForce,                    // pound_force
+	customary.PoundPerSquareInch,            // pound_per_square_inch
 	ratio.PartsPerBillion,                   // ppb
 	ratio.PartsPerMillion,                   // ppm
 	angle.Radian,                            // radian
@@ -135,13 +141,15 @@ var all = []metrology.Unit{
 	solidangle.Steradian,                    // steradian
 	kinematicviscosity.Stokes,               // stokes
 	fluxdensity.Tesla,                       // tesla
+	imperial.Ton,                            // ton_long
+	us.Ton,                                  // ton_short
 	mass.Tonne,                              // tonne
 	pressure.Torr,                           // torr
 	voltage.Volt,                            // volt
 	power.Watt,                              // watt
 	thermalconductivity.WattPerMetreKelvin,  // watt_per_metre_kelvin
 	magneticflux.Weber,                      // weber
-	imperial.Yard,                           // yard
+	customary.Yard,                          // yard
 }
 
 // canonical maps a dimension, kind and quantity to the unit a result
@@ -215,7 +223,11 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "erg", kind: metrology.Interval}:      energy.Erg,
 	{text: "°F", kind: metrology.Absolute}:       temperature.Fahrenheit,
 	{text: "F", kind: metrology.Interval}:        capacitance.Farad,
-	{text: "ft", kind: metrology.Interval}:       imperial.Foot,
+	{text: "flozImp", kind: metrology.Interval}:  imperial.FluidOunce,
+	{text: "flozUS", kind: metrology.Interval}:   us.FluidOunce,
+	{text: "ft", kind: metrology.Interval}:       customary.Foot,
+	{text: "galImp", kind: metrology.Interval}:   imperial.Gallon,
+	{text: "galUS", kind: metrology.Interval}:    us.Gallon,
 	{text: "G", kind: metrology.Interval}:        fluxdensity.Gauss,
 	{text: "g/L", kind: metrology.Interval}:      density.GramPerLitre,
 	{text: "Gy", kind: metrology.Interval}:       absorbeddose.Gray,
@@ -223,7 +235,7 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "H", kind: metrology.Interval}:        inductance.Henry,
 	{text: "Hz", kind: metrology.Interval}:       frequency.Hertz,
 	{text: "h", kind: metrology.Interval}:        duration.Hour,
-	{text: "in", kind: metrology.Interval}:       imperial.Inch,
+	{text: "in", kind: metrology.Interval}:       customary.Inch,
 	{text: "J", kind: metrology.Interval}:        energy.Joule,
 	{text: "J/(kg·K)", kind: metrology.Interval}: specificheat.JoulePerKilogramKelvin,
 	{text: "kat", kind: metrology.Interval}:      catalytic.Katal,
@@ -244,7 +256,7 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "m", kind: metrology.Interval}:        length.Metre,
 	{text: "m/s", kind: metrology.Interval}:      velocity.MetrePerSecond,
 	{text: "m/s²", kind: metrology.Interval}:     acceleration.MetrePerSecondSquared,
-	{text: "mi", kind: metrology.Interval}:       imperial.Mile,
+	{text: "mi", kind: metrology.Interval}:       customary.Mile,
 	{text: "mmHg", kind: metrology.Interval}:     pressure.MillimetreOfMercury,
 	{text: "mmH₂O", kind: metrology.Interval}:    pressure.MillimetreOfWater,
 	{text: "min", kind: metrology.Interval}:      duration.Minute,
@@ -255,15 +267,15 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "N/m", kind: metrology.Interval}:      surfacetension.NewtonPerMetre,
 	{text: "Ω", kind: metrology.Interval}:        resistance.Ohm,
 	{text: "1", kind: metrology.Interval}:        ratio.One,
-	{text: "oz", kind: metrology.Interval}:       imperial.Ounce,
+	{text: "oz", kind: metrology.Interval}:       customary.Ounce,
 	{text: "Pa", kind: metrology.Interval}:       pressure.Pascal,
 	{text: "Pa·s", kind: metrology.Interval}:     viscosity.PascalSecond,
 	{text: "%", kind: metrology.Interval}:        ratio.Percent,
 	{text: "‰", kind: metrology.Interval}:        ratio.PerMille,
 	{text: "P", kind: metrology.Interval}:        viscosity.Poise,
-	{text: "lb", kind: metrology.Interval}:       imperial.Pound,
-	{text: "lbf", kind: metrology.Interval}:      imperial.PoundForce,
-	{text: "psi", kind: metrology.Interval}:      imperial.PoundPerSquareInch,
+	{text: "lb", kind: metrology.Interval}:       customary.Pound,
+	{text: "lbf", kind: metrology.Interval}:      customary.PoundForce,
+	{text: "psi", kind: metrology.Interval}:      customary.PoundPerSquareInch,
 	{text: "ppb", kind: metrology.Interval}:      ratio.PartsPerBillion,
 	{text: "ppm", kind: metrology.Interval}:      ratio.PartsPerMillion,
 	{text: "rad", kind: metrology.Interval}:      angle.Radian,
@@ -277,11 +289,13 @@ var bySymbol = map[symbolKey]metrology.Unit{
 	{text: "sr", kind: metrology.Interval}:       solidangle.Steradian,
 	{text: "St", kind: metrology.Interval}:       kinematicviscosity.Stokes,
 	{text: "T", kind: metrology.Interval}:        fluxdensity.Tesla,
+	{text: "tonImp", kind: metrology.Interval}:   imperial.Ton,
+	{text: "tonUS", kind: metrology.Interval}:    us.Ton,
 	{text: "t", kind: metrology.Interval}:        mass.Tonne,
 	{text: "Torr", kind: metrology.Interval}:     pressure.Torr,
 	{text: "V", kind: metrology.Interval}:        voltage.Volt,
 	{text: "W", kind: metrology.Interval}:        power.Watt,
 	{text: "W/(m·K)", kind: metrology.Interval}:  thermalconductivity.WattPerMetreKelvin,
 	{text: "Wb", kind: metrology.Interval}:       magneticflux.Weber,
-	{text: "yd", kind: metrology.Interval}:       imperial.Yard,
+	{text: "yd", kind: metrology.Interval}:       customary.Yard,
 }

@@ -112,7 +112,19 @@ type symbolSpec struct {
 }
 
 // qualified is the Go expression referring to a unit from outside its package.
-func (u unitSpec) qualified() string { return u.quantity.Package + "." + u.Go }
+func (u unitSpec) qualified() string { return u.quantity.name() + "." + u.Go }
+
+// name is the Go package name: the last element of the package path.
+//
+// The two differ only where a package sits below another — units/customary/us
+// is imported from that path and written us.Gallon (D19). Everywhere else the
+// path is one element and the two are the same string.
+func (q quantity) name() string {
+	if i := strings.LastIndex(q.Package, "/"); i >= 0 {
+		return q.Package[i+1:]
+	}
+	return q.Package
+}
 
 // unitsDir is the directory the generated quantity packages live in, below the
 // module root: github.com/timzifer/metrology/units/pressure (D18). It is data,

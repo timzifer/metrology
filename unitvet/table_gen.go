@@ -31,7 +31,11 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/energy.Erg":                              {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2, Mass: 1})},                         // erg
 	"github.com/timzifer/metrology/units/temperature.Fahrenheit":                  {dim: dimension.New(dimension.Exponents{Temperature: 1}), kind: metrology.Absolute},             // fahrenheit
 	"github.com/timzifer/metrology/units/capacitance.Farad":                       {dim: dimension.New(dimension.Exponents{Time: 4, Length: -2, Mass: -1, ElectricCurrent: 2})},    // farad
-	"github.com/timzifer/metrology/units/imperial.Foot":                           {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // foot
+	"github.com/timzifer/metrology/units/customary/imperial.FluidOunce":           {dim: dimension.New(dimension.Exponents{Length: 3})},                                            // fluid_ounce_imperial
+	"github.com/timzifer/metrology/units/customary/us.FluidOunce":                 {dim: dimension.New(dimension.Exponents{Length: 3})},                                            // fluid_ounce_us
+	"github.com/timzifer/metrology/units/customary.Foot":                          {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // foot
+	"github.com/timzifer/metrology/units/customary/imperial.Gallon":               {dim: dimension.New(dimension.Exponents{Length: 3})},                                            // gallon_imperial
+	"github.com/timzifer/metrology/units/customary/us.Gallon":                     {dim: dimension.New(dimension.Exponents{Length: 3})},                                            // gallon_us
 	"github.com/timzifer/metrology/units/fluxdensity.Gauss":                       {dim: dimension.New(dimension.Exponents{Time: -2, Mass: 1, ElectricCurrent: -1})},               // gauss
 	"github.com/timzifer/metrology/units/density.GramPerLitre":                    {dim: dimension.New(dimension.Exponents{Length: -3, Mass: 1})},                                  // gram_per_litre
 	"github.com/timzifer/metrology/units/absorbeddose.Gray":                       {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2}), quantity: "absorbed dose"},       // gray
@@ -39,7 +43,7 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/inductance.Henry":                        {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2, Mass: 1, ElectricCurrent: -2})},    // henry
 	"github.com/timzifer/metrology/units/frequency.Hertz":                         {dim: dimension.New(dimension.Exponents{Time: -1}), quantity: "frequency"},                      // hertz
 	"github.com/timzifer/metrology/units/duration.Hour":                           {dim: dimension.New(dimension.Exponents{Time: 1})},                                              // hour
-	"github.com/timzifer/metrology/units/imperial.Inch":                           {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // inch
+	"github.com/timzifer/metrology/units/customary.Inch":                          {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // inch
 	"github.com/timzifer/metrology/units/energy.Joule":                            {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2, Mass: 1})},                         // joule
 	"github.com/timzifer/metrology/units/specificheat.JoulePerKilogramKelvin":     {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2, Temperature: -1})},                 // joule_per_kilogram_kelvin
 	"github.com/timzifer/metrology/units/catalytic.Katal":                         {dim: dimension.New(dimension.Exponents{Time: -1, AmountOfSubstance: 1})},                       // katal
@@ -60,7 +64,7 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/length.Metre":                            {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // metre
 	"github.com/timzifer/metrology/units/velocity.MetrePerSecond":                 {dim: dimension.New(dimension.Exponents{Time: -1, Length: 1})},                                  // metre_per_second
 	"github.com/timzifer/metrology/units/acceleration.MetrePerSecondSquared":      {dim: dimension.New(dimension.Exponents{Time: -2, Length: 1})},                                  // metre_per_second_squared
-	"github.com/timzifer/metrology/units/imperial.Mile":                           {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // mile
+	"github.com/timzifer/metrology/units/customary.Mile":                          {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // mile
 	"github.com/timzifer/metrology/units/pressure.MillimetreOfMercury":            {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // millimetre_of_mercury
 	"github.com/timzifer/metrology/units/pressure.MillimetreOfWater":              {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // millimetre_of_water
 	"github.com/timzifer/metrology/units/duration.Minute":                         {dim: dimension.New(dimension.Exponents{Time: 1})},                                              // minute
@@ -71,15 +75,15 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/surfacetension.NewtonPerMetre":           {dim: dimension.New(dimension.Exponents{Time: -2, Mass: 1})},                                    // newton_per_metre
 	"github.com/timzifer/metrology/units/resistance.Ohm":                          {dim: dimension.New(dimension.Exponents{Time: -3, Length: 2, Mass: 1, ElectricCurrent: -2})},    // ohm
 	"github.com/timzifer/metrology/units/ratio.One":                               {dim: dimension.New(dimension.Exponents{})},                                                     // one
-	"github.com/timzifer/metrology/units/imperial.Ounce":                          {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // ounce
+	"github.com/timzifer/metrology/units/customary.Ounce":                         {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // ounce
 	"github.com/timzifer/metrology/units/pressure.Pascal":                         {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // pascal
 	"github.com/timzifer/metrology/units/viscosity.PascalSecond":                  {dim: dimension.New(dimension.Exponents{Time: -1, Length: -1, Mass: 1})},                        // pascal_second
 	"github.com/timzifer/metrology/units/ratio.Percent":                           {dim: dimension.New(dimension.Exponents{})},                                                     // percent
 	"github.com/timzifer/metrology/units/ratio.PerMille":                          {dim: dimension.New(dimension.Exponents{})},                                                     // permille
 	"github.com/timzifer/metrology/units/viscosity.Poise":                         {dim: dimension.New(dimension.Exponents{Time: -1, Length: -1, Mass: 1})},                        // poise
-	"github.com/timzifer/metrology/units/imperial.Pound":                          {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // pound
-	"github.com/timzifer/metrology/units/imperial.PoundForce":                     {dim: dimension.New(dimension.Exponents{Time: -2, Length: 1, Mass: 1})},                         // pound_force
-	"github.com/timzifer/metrology/units/imperial.PoundPerSquareInch":             {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // pound_per_square_inch
+	"github.com/timzifer/metrology/units/customary.Pound":                         {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // pound
+	"github.com/timzifer/metrology/units/customary.PoundForce":                    {dim: dimension.New(dimension.Exponents{Time: -2, Length: 1, Mass: 1})},                         // pound_force
+	"github.com/timzifer/metrology/units/customary.PoundPerSquareInch":            {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // pound_per_square_inch
 	"github.com/timzifer/metrology/units/ratio.PartsPerBillion":                   {dim: dimension.New(dimension.Exponents{})},                                                     // ppb
 	"github.com/timzifer/metrology/units/ratio.PartsPerMillion":                   {dim: dimension.New(dimension.Exponents{})},                                                     // ppm
 	"github.com/timzifer/metrology/units/angle.Radian":                            {dim: dimension.New(dimension.Exponents{}), quantity: "plane angle"},                            // radian
@@ -93,11 +97,13 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/solidangle.Steradian":                    {dim: dimension.New(dimension.Exponents{}), quantity: "solid angle"},                            // steradian
 	"github.com/timzifer/metrology/units/kinematicviscosity.Stokes":               {dim: dimension.New(dimension.Exponents{Time: -1, Length: 2}), quantity: "kinematic viscosity"}, // stokes
 	"github.com/timzifer/metrology/units/fluxdensity.Tesla":                       {dim: dimension.New(dimension.Exponents{Time: -2, Mass: 1, ElectricCurrent: -1})},               // tesla
+	"github.com/timzifer/metrology/units/customary/imperial.Ton":                  {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // ton_long
+	"github.com/timzifer/metrology/units/customary/us.Ton":                        {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // ton_short
 	"github.com/timzifer/metrology/units/mass.Tonne":                              {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // tonne
 	"github.com/timzifer/metrology/units/pressure.Torr":                           {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // torr
 	"github.com/timzifer/metrology/units/voltage.Volt":                            {dim: dimension.New(dimension.Exponents{Time: -3, Length: 2, Mass: 1, ElectricCurrent: -1})},    // volt
 	"github.com/timzifer/metrology/units/power.Watt":                              {dim: dimension.New(dimension.Exponents{Time: -3, Length: 2, Mass: 1})},                         // watt
 	"github.com/timzifer/metrology/units/thermalconductivity.WattPerMetreKelvin":  {dim: dimension.New(dimension.Exponents{Time: -3, Length: 1, Mass: 1, Temperature: -1})},        // watt_per_metre_kelvin
 	"github.com/timzifer/metrology/units/magneticflux.Weber":                      {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2, Mass: 1, ElectricCurrent: -1})},    // weber
-	"github.com/timzifer/metrology/units/imperial.Yard":                           {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // yard
+	"github.com/timzifer/metrology/units/customary.Yard":                          {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // yard
 }

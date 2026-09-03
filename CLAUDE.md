@@ -13,8 +13,8 @@ dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
 **The library is complete for its stated scope.** The core computes, the
-catalogue holds 82 units across 43 quantity packages, plus 8 customary units in
-`units/imperial` (D19) — all seven SI base units,
+catalogue holds 82 units across 43 quantity packages, plus 14 customary units in
+`units/customary` (D19) — all seven SI base units,
 all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
 and writes (`metrology` writes, `parse` reads), and `unitvet` checks dimensions
@@ -34,13 +34,16 @@ The generated quantity packages live under `units/` (D18) —
 `units/pressure`, `units/temperature`. The seven hand-written packages stay at
 the module root. A new quantity package goes under `units/` because that is
 where `catgen` writes it; nothing chooses the directory by hand. One package to come is a
-provenance and not a quantity — `units/imperial` (D19), several dimensions in
+provenance and not a quantity — `units/customary` (D19), several dimensions in
 one package — and it is the only one the one-dimension rule does not apply to.
 
-A customary unit that the US and imperial systems disagree about does **not** go
-in yet — that is O3, and a second package would not help, because the symbol
-index of D12 is global and two units spelling `gal` are rejected wherever they
-live.
+A customary unit the two systems disagree about goes in `units/customary/us` or
+`units/customary/imperial`, and **neither claims the bare spelling**: `gal` names
+two units a fifth apart, so it names none here (D19/O3). The symbol index is
+global — `catgen` keys it by spelling and kind with no package in the key — so
+a second package would not have made a second namespace. Never add a symbol
+containing a space either: `parse` treats a blank as a separator so that
+`m² / s` off a data sheet reads.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
