@@ -26,10 +26,12 @@ measured by.
 
 `metrology/uncertainty` is the interval layer of D15 — `Range`, a magnitude
 known only to lie between two bounds. Read D15 before touching it. Uncertainty
-*propagation* — quadrature, correlations, coverage factors — stays deferred in
-section 8 and is not what this is: it is interval arithmetic, it has the
-dependency problem, and the package doc says so on its first line because a
-reader who takes it for a GUM implementation gets numbers that look right.
+*propagation* — quadrature, correlations, coverage factors — is not what this
+is: it is interval arithmetic, it has the dependency problem, and the package doc
+says so on its first line because a reader who takes it for a GUM implementation
+gets numbers that look right. Propagation is decided as D21 and not built —
+`metrology/gum`, a sibling package, deliberately not a second type in this one,
+because the two models disagree about `x − x` on purpose.
 
 The generated quantity packages live under `units/` (D18) —
 `units/pressure`, `units/temperature`. The eight hand-written packages stay at
@@ -147,7 +149,9 @@ magnitude is therefore untagged. Do not merge the two back into one value.
 
 **Every catalogue factor is exact.** A unit whose factor involves π — the degree
 of arc, the oersted — does not go into the catalogue with a rounded decimal. It
-waits for symbolic factors. See D4 and section 8 of `CONCEPT.md`.
+waits for the symbolic factor of D20 (decided, not built): one π exponent beside
+the fraction, which keeps the entry exact and moves the single unavoidable
+rounding to the conversion that crosses out of the π units. See D4 and D20.
 
 ## Commands
 
