@@ -130,6 +130,12 @@ const corePath = "github.com/timzifer/metrology"
 // checker at all, because nobody would notice.
 const rangePath = corePath + "/uncertainty"
 
+// gumPath is the propagation layer of D21. It is the third receiver type, and
+// it costs the pass what D15 predicted the second would: nothing but the
+// registration. A gum.Value's dimension, kind and quantity are its estimate's,
+// so every rule below applies to it unchanged.
+const gumPath = corePath + "/gum"
+
 // corePackages names, for each package this pass has rules for, the types whose
 // methods those rules are about.
 //
@@ -141,15 +147,28 @@ const rangePath = corePath + "/uncertainty"
 var corePackages = map[string][]string{
 	corePath:  {"Measurement", "Unit", "Engine"},
 	rangePath: {"Range", "Engine"},
+	gumPath:   {"Value", "Engine"},
 }
 
-// rangeConstructors are the package-level functions of the interval layer that
-// build a Range out of measurements.
+// layerConstructors are the package-level functions of the layers above the
+// core that build one of their types out of measurements.
 //
 // They are functions and not methods, so the receiver rule of coreCall does not
-// reach them — and without them no range is resolvable at all, since every
-// range enters through one of these three.
-var rangeConstructors = map[string]bool{"Of": true, "Between": true, "Symmetric": true}
+// reach them — and without them nothing in either layer is resolvable at all,
+// since every range and most values enter through one of these.
+//
+// What is not here is not an oversight. gum.Of takes a struct, gum.Sample a
+// slice and gum.Correlated a pair of structs, and a field of a composite
+// literal is exactly the container read this pass does not follow (D13). A
+// value built by one of them resolves to nothing, and the pass says nothing
+// about it — which is the silence of doubt and not a hole in the rules.
+var layerConstructors = map[string]map[string]bool{
+	rangePath: {"Of": true, "Between": true, "Symmetric": true},
+	gumPath:   {"Exactly": true, "Standard": true, "Apply": true},
+}
+
+// layerTypes names the type each layer's constructors build.
+var layerTypes = map[string]string{rangePath: "Range", gumPath: "Value"}
 
 // ignoreMarker silences the diagnostics on the line it is written on and on
 // the line below it. The spelling matches the //coverage:ignore markers of
@@ -308,8 +327,8 @@ func coreTypes(pkg *types.Package) map[*types.TypeName]owned {
 
 // owned names one of the library's types and the package it lives in.
 type owned struct {
-	owner string // the import path, corePath or rangePath
-	name  string // Measurement, Unit, Engine, Range
+	owner string // the import path: corePath, rangePath or gumPath
+	name  string // Measurement, Unit, Engine, Range, Value
 }
 
 // findPackage returns the package with the given import path from anywhere in

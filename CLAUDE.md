@@ -18,8 +18,10 @@ catalogue holds 90 units across 44 quantity packages, plus 14 customary units in
 all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
 and writes (`metrology` writes, `parse` reads), `uncertainty` carries bounds
-instead of a point (D15), and `unitvet` checks dimensions statically per D13
-over both. What remains before `v1.0.0` is the deliberate API review of
+instead of a point (D15), `gum` carries an uncertainty budget with the
+provenance of every contribution (D21), and `unitvet` checks dimensions
+statically per D13 over all three. What remains before `v1.0.0` is the
+deliberate API review of
 section 7 of `CONCEPT.md`; until then the module is `v0.x` and the API may
 change. Section 7 also records what is complete and what each subsystem is
 measured by.
@@ -29,9 +31,29 @@ known only to lie between two bounds. Read D15 before touching it. Uncertainty
 *propagation* — quadrature, correlations, coverage factors — is not what this
 is: it is interval arithmetic, it has the dependency problem, and the package doc
 says so on its first line because a reader who takes it for a GUM implementation
-gets numbers that look right. Propagation is decided as D21 and not built —
-`metrology/gum`, a sibling package, deliberately not a second type in this one,
-because the two models disagree about `x − x` on purpose.
+gets numbers that look right.
+
+`metrology/gum` is the propagation layer of D21 — the GUM's own model, and a
+sibling package rather than a second type in `uncertainty`, because the two
+disagree about `x − x` on purpose: in an interval it is not zero and must not
+be, in a budget it is zero exactly. Read D21 before touching it. Three rules
+carry the package. **A `Value` holds one contribution per independent input,
+identified by a `Source`** — correlation is shared provenance and nothing else,
+and a declared correlation is decomposed into independent inputs when the values
+are built, so no covariance matrix is consulted at combination time and no
+operation needs a context object (D7). **Contributions round to nearest and only
+the combined uncertainty rounds up** — the opposite of D15's rule, and for a
+reason: rounding a contribution outward would leave `x − x` with an uncertainty
+it does not have, and cancellation is the property the layer exists for. **The
+package computes exactly one thing for itself, the square root**, because the
+core has none; everything else goes through the core so that D9 stays the single
+rounding policy. `apd` ignores the rounding mode on a square root — measured —
+so the upward direction is applied afterwards as one unit in the last place.
+
+There is no table of t-factors in `gum`, and adding one is not an improvement:
+`EffectiveFreedom` gives ν_eff, the standard's Table G.2 gives k, and a page of
+quantiles transcribed here would be numbers with nothing to check them against —
+the thing D4 refuses for a conversion factor.
 
 The generated quantity packages live under `units/` (D18) —
 `units/pressure`, `units/temperature`. The eight hand-written packages stay at

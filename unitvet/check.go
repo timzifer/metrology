@@ -23,7 +23,7 @@ func (c *checker) check(fn *ssa.Function) {
 				continue
 			}
 			switch name {
-			case "Add", "Sub", "Cmp", "Overlaps", "Between", "Symmetric":
+			case "Add", "Sub", "Cmp", "Overlaps", "Between", "Symmetric", "Standard":
 				c.checkAdditive(call, name)
 			case "Mul", "Div", "Times", "Per":
 				c.checkScaling(call, name)
@@ -100,9 +100,10 @@ func affineRule(op string, left, right metrology.Kind) (why string, forbidden bo
 		if left == metrology.Interval && right == metrology.Absolute {
 			return "a point on a scale cannot be subtracted from a span along it", true
 		}
-	case "Symmetric":
-		// A tolerance is a distance along a scale: m − tol and m + tol have to
-		// be meaningful, and with an absolute tolerance the second is not.
+	case "Symmetric", "Standard":
+		// A tolerance is a distance along a scale, and so is a standard
+		// uncertainty (D21): m − tol and m + tol have to be meaningful, and
+		// with an absolute one the second is not.
 		if right == metrology.Absolute {
 			return "a tolerance is a span along a scale, not a point on it", true
 		}

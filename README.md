@@ -183,8 +183,38 @@ This is interval arithmetic and not an uncertainty budget. It has the dependency
 problem — `x − x` is not zero, `x / x` is not one, and a formula naming a
 variable twice over-widens. For checking a number that is conservative and safe;
 as a GUM-style uncertainty budget it is wrong, and the package says so on its
-first line. Quadrature combination, correlated quantities and coverage factors
-are deliberately not here.
+first line. The budget is the next section, and it is a different package on
+purpose.
+
+## An uncertainty budget, the way the GUM does one
+
+`gum.Value` carries an estimate and the decomposition that produced its
+uncertainty: one contribution per independent input, each tagged with the input
+it came from. Combining two values applies the law of propagation of uncertainty
+to first order (JCGM 100 §5), and correlation is not a matrix on the side — two
+values are correlated exactly where their contributions name the same input:
+
+```go
+l, _ := gum.Standard(length.Metre.Of(100), length.Metre.Of(0.1))
+w, _ := gum.Standard(length.Metre.Of(50), length.Metre.Of(0.05))
+
+area, _ := l.Mul(w)          // 5000 m² ± 7.0710678118654752441 m²
+zero, _ := l.Sub(l)          // 0 m ± 0 m
+```
+
+`x − x` is exactly zero here and `x / x` exactly one, which is the whole reason
+this is a second package rather than a second type in the first one: the two
+models disagree about the same subtraction on purpose, and each is right in its
+own. A budget also reports itself — `Contributions` is the table, `Sample` is a
+Type A evaluation, `Rectangular` and its neighbours are the Type B divisors,
+`EffectiveFreedom` is Welch-Satterthwaite, and `Expanded(k)` hands the result
+back as an `uncertainty.Range` so the interval layer can write it.
+
+What is deliberately not there: Monte Carlo evaluation, automatic
+differentiation — `Apply` takes the partial derivatives from the caller, who can
+cite them — and the t-table that turns effective degrees of freedom into a
+coverage factor, because a page of quantiles with nothing to check it against is
+what this library refuses everywhere else.
 
 ## Dimensions are checked before the code runs
 
