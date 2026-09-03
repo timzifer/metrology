@@ -36,12 +36,15 @@ func validate(c *catalogue) error {
 		}
 		byID[u.ID] = u
 
-		// One dimension per package: the package is the quantity, and a package
+		// One dimension per package, unless the package is a provenance rather
+		// than a quantity (D19): the package is the quantity, and a package
 		// holding two dimensions would make the autocompletion catalogue lie.
-		if previous, seen := packages[q.Package]; seen && previous != q.Dimension.dimensionExpr() {
-			report("package %q declares two dimensions", q.Package)
+		if !q.isProvenance() {
+			if previous, seen := packages[q.Package]; seen && previous != u.dimension().dimensionExpr() {
+				report("package %q declares two dimensions", q.Package)
+			}
+			packages[q.Package] = u.dimension().dimensionExpr()
 		}
-		packages[q.Package] = q.Dimension.dimensionExpr()
 
 		if previous, seen := identifiers[u.qualified()]; seen {
 			report("duplicate Go identifier %s, from unit ids %s and %s", u.qualified(), previous, u.ID)
@@ -84,6 +87,27 @@ func validate(c *catalogue) error {
 			// uncheckable factor is exactly what D4 was written against.
 			report("unit %s has no source", u.ID)
 		}
+
+		// Where the dimension is written decides what the package is, so the
+		// two have to agree (D19). A quantity package states it once; a
+		// provenance package states it per unit and cannot state it twice.
+		switch {
+		case q.isProvenance() && u.Dimension == nil:
+			report("unit %s is in the provenance package %q and declares no dimension of its own", u.ID, q.Package)
+		case !q.isProvenance() && u.Dimension != nil:
+			report("unit %s declares a dimension, but package %q is a quantity and declares one for it", u.ID, q.Package)
+		}
+	}
+
+	// A group is a quantity or a provenance and nothing else. A misspelling
+	// would otherwise read as the default and take the checks above with it.
+	for _, q := range c.Quantities {
+		if q.Group != "" && q.Group != groupProvenance {
+			report("package %q declares an unknown group %q", q.Package, q.Group)
+		}
+		if q.isProvenance() && q.Quantity != "" {
+			report("package %q is a provenance and cannot carry one quantity tag", q.Package)
+		}
 	}
 
 	// Every dimension, kind and quantity that occurs must have a canonical
@@ -91,8 +115,8 @@ func validate(c *catalogue) error {
 	// expressed in.
 	for _, u := range c.units() {
 		if _, ok := canonical[canonicalKey(u)]; !ok {
-			report("no canonical unit for the dimension of package %q, kind %s",
-				u.quantity.Package, strings.TrimPrefix(u.kindExpr(), "metrology."))
+			report("no canonical unit for the dimension %s, kind %s",
+				u.dimension().dimensionExpr(), strings.TrimPrefix(u.kindExpr(), "metrology."))
 			canonical[canonicalKey(u)] = u.ID // report once
 		}
 	}
@@ -125,7 +149,7 @@ func validate(c *catalogue) error {
 // canonicalKey identifies the slot a canonical unit fills: one per dimension,
 // kind and quantity.
 func canonicalKey(u unitSpec) string {
-	return u.quantity.Dimension.dimensionExpr() + "\x00" + u.kindExpr() + "\x00" + u.quantityTag()
+	return u.dimension().dimensionExpr() + "\x00" + u.kindExpr() + "\x00" + u.quantityTag()
 }
 
 // validateFactor checks what [metrology.NewUnit] would check, before the

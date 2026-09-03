@@ -15,6 +15,7 @@ import (
 	"github.com/timzifer/metrology/units/energy"
 	"github.com/timzifer/metrology/units/fluxdensity"
 	"github.com/timzifer/metrology/units/force"
+	"github.com/timzifer/metrology/units/imperial"
 	"github.com/timzifer/metrology/units/kinematicviscosity"
 	"github.com/timzifer/metrology/units/length"
 	"github.com/timzifer/metrology/units/magneticflux"
@@ -91,10 +92,31 @@ func TestNISTConversionFactors(t *testing.T) {
 		{"percent", ratio.Percent.Of(1), ratio.One, "0.01"},
 		{"parts per million", ratio.PartsPerMillion.Of(1), ratio.One, "0.000001"},
 
+		// --- NIST SP 811 Appendix B.6, the customary units (D19) ------------
+		//
+		// All of these are exact: the international yard and pound agreement of
+		// 1959 fixes the inch and the pound, and the rest follow by exact
+		// multiplication. The pound per square inch is the one whose quotient
+		// is not a finite decimal, which is why it is stored as the fraction it
+		// is defined by (D4) and compared here to more digits than a rounded
+		// factor could carry.
+		{"inch", imperial.Inch.Of(1), length.Metre, "0.0254"},
+		{"foot", imperial.Foot.Of(1), length.Metre, "0.3048"},
+		{"yard", imperial.Yard.Of(1), length.Metre, "0.9144"},
+		{"mile", imperial.Mile.Of(1), length.Metre, "1609.344"},
+		{"pound", imperial.Pound.Of(1), mass.Kilogram, "0.45359237"},
+		{"ounce", imperial.Ounce.Of(1), mass.Kilogram, "0.028349523125"},
+		{"pound-force", imperial.PoundForce.Of(1), force.Newton, "4.4482216152605"},
+		{"pound per square inch", imperial.PoundPerSquareInch.Of(1), pressure.Pascal,
+			"6894.757293168361336722673445"},
+
 		// --- The exact ones, in the direction that exposes a rounded factor --
 		{"760 torr is one atmosphere", pressure.Torr.Of(760), pressure.Pascal, "101325"},
 		{"and back", pressure.Atmosphere.Of(1), pressure.Torr, "760"},
 		{"a gray is a joule per kilogram", absorbeddose.Gray.Of(1), absorbeddose.Gray, "1"},
+		{"twelve inches are a foot", imperial.Inch.Of(12), imperial.Foot, "1"},
+		{"sixteen ounces are a pound", imperial.Ounce.Of(16), imperial.Pound, "1"},
+		{"1760 yards are a mile", imperial.Yard.Of(1760), imperial.Mile, "1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.from.To(tc.to)

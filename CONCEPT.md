@@ -1078,8 +1078,8 @@ is D1's boxing argument in this exact setting.
 **What the type parameter costs the rest of the design.** `Measurement[V, B]`
 does not stay in `measurement.go`:
 
-- **The catalogue instantiates.** The 82 units of section 6 are package-level
-  `var`s of type `metrology.Unit` across 43 quantity packages (D7, D8). Generic,
+- **The catalogue instantiates.** The units of section 6 are package-level
+  `var`s of type `metrology.Unit` across forty-four packages (D7, D8). Generic,
   each of them is *one* instantiation, so a second backend needs a second set —
   the generator emits every quantity package twice, or the fast units are
   converted from the exact ones at run time. If it is conversion, the type
@@ -1342,6 +1342,37 @@ to alias one of them.
 parser is a value holding the units it was given (D12); `unitvet` keys its table
 by import path and needs nothing at all.
 
+**How the generator knows.** A catalogue group carries `group: provenance`, and
+the default is `quantity`. It is spelled out rather than inferred from whether a
+dimension was given, because a package holding two dimensions by accident is a
+defect `catgen` has always caught and should keep catching: with the marker, the
+one-dimension check still fires everywhere the group is a quantity, and the
+per-unit dimension is required exactly where the package has none. The two
+catalogue files are read by one run and validated as one document — a symbol
+that resolves to two units is a defect whichever file each half is written in.
+
+**What shipped, and what did not.** The first batch is the eight units that are
+the same in both customary systems and exactly defined in NIST SP 811 Appendix
+B.6: the inch, foot, yard and mile, the pound and ounce, the pound-force, and
+the pound per square inch. Every one is a finite decimal multiple of the inch or
+the pound, so D4 holds without symbolic factors; the golden test compares them
+against the standard to twenty-eight significant digits, which is where a
+pre-divided psi would already have failed.
+
+Left out, and for one reason each rather than for a general shortage of nerve:
+
+- **The gallon, the fluid ounce and the ton**, because the US and the imperial
+  values differ — the gallons by a fifth — and this package is named for one of
+  the two systems. That is a naming question before it is a catalogue question,
+  and it is open: `units/imperial` cannot correctly hold a US gallon, so either
+  the package is renamed to something that covers both or the divergent units go
+  in a second one. A unit whose package name contradicts its definition is worse
+  than a missing unit.
+- **The British thermal unit**, which is at least five units — International
+  Table, thermochemical, and three more — sharing one spelling. D12 cannot hold
+  two units under one symbol, so this one needs its spellings decided before it
+  needs its factors.
+
 **What the implementation has to get right**, recorded here because these are
 the entries an unwary catalogue gets wrong:
 
@@ -1461,7 +1492,7 @@ err = json.Unmarshal(data, &field)             // carries its parser along
 | `tools/covercheck` | the coverage gate of D14 |
 | `units/length`, `units/pressure`, … | one package per quantity, fully generated (D18) |
 | `units/interval` | the interval units the absolute scales subtract into |
-| `units/imperial` | the customary units, one package by provenance (D19, planned) |
+| `units/imperial` | the customary units, one package by provenance (D19) |
 
 **One package per quantity,** because it turns autocompletion into a search
 function: `pressure.` lists exactly the pressure units. Nobody maintains those
@@ -1498,9 +1529,13 @@ it with `GOPROXY=off` and a cold module cache would otherwise fail the run.
 
 ## 6. The catalogue
 
-`catalog/catalog.yaml` holds **82 units across 43 quantity packages**: all seven
-SI base units, all twenty-two named derived units, and the non-SI units of NIST
-SP 811 that process engineering uses.
+The catalogue is two files. `catalog/catalog.yaml` holds **82 units across 43
+quantity packages**: all seven SI base units, all twenty-two named derived
+units, and the non-SI units of NIST SP 811 that process engineering uses.
+`catalog/imperial.yaml` holds **8 customary units in one package** grouped by
+provenance rather than by quantity (D19). Both are read by one `catgen` run and
+validated as one document, because a symbol resolving to two units is a defect
+whichever file each half is written in.
 
 | Block | Contents |
 |---|---|
@@ -1510,6 +1545,7 @@ SP 811 that process engineering uses.
 | Process-engineering non-SI | bar, torr, mmHg, mmH₂O, atm, l and l/min, m³/h, kWh, ppm and ppb, °F, t, min, h, d |
 | CGS and other legacy units | dyne, erg, poise, stokes, gauss, maxwell, curie, rem, calorie, electronvolt, ångström, barn, are, hectare |
 | Dimensionless | ratio, plane angle, solid angle — separated by the quantity tag of D6 |
+| Customary (`units/imperial`, D19) | in, ft, yd, mi, lb, oz, lbf, psi — every one exact by the 1959 agreement |
 
 A golden test compares every non-SI unit against the conversion factors printed
 in NIST SP 811. It compares to **eighteen significant digits, not to the last
@@ -1573,7 +1609,7 @@ was:
   becquerel, the run time refuses the conflict in every additive operation and
   every conversion, and `unitvet` follows the tag through the products that drop
   it. The type stays a `string`, because the catalogue is data (D8) and the set
-  of quantities is open — ten of the eighty-two units carry a tag.
+  of quantities is open — ten of the ninety units carry a tag.
   **Whose namespace?** This catalogue's (D16). Every tagged package declares its
   own constant — `frequency.Quantity` — and the unit definitions are generated
   from it. Not the *type's*: a caller's catalogue declares its own tags, two

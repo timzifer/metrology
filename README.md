@@ -76,6 +76,9 @@ and the catalogue index:
 It holds **82 units across 43 quantity packages**: all seven SI base units, all
 twenty-two named derived units, the CGS and legacy units that still appear in
 data sheets, and the non-SI units of NIST SP 811 that process engineering uses.
+A second file adds **8 customary units** in `units/imperial` — the inch, the
+foot, the yard, the mile, the pound, the ounce, the pound-force and psi, every
+one exact by the international yard and pound agreement of 1959.
 
 Every entry carries a source, because a conversion factor is a claim about the
 world and a claim without a citation cannot be checked. The generator refuses a

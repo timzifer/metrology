@@ -1,0 +1,96 @@
+# The customary units: a package grouped by where its units come from rather
+# than by what they measure (D19).
+#
+# What is here is exactly defined and citable. The international yard and pound
+# agreement of 1959 makes the inch exactly 25.4 mm and the pound exactly
+# 0.45359237 kg, and every entry below is a finite decimal multiple of one of
+# those two — so D4 holds and nothing waits for symbolic factors.
+#
+# What is deliberately not here:
+#
+#   * the gallon, the fluid ounce and the ton, because the US and the imperial
+#     values differ and this package is named for one of the two systems. That
+#     is a naming question before it is a catalogue question, and a unit whose
+#     package name contradicts its definition is worse than a missing unit.
+#   * the British thermal unit, which is at least five different units — the
+#     International Table one, the thermochemical one, and three more — sharing
+#     one symbol. D12 cannot hold two units under one spelling, so this one
+#     needs its spellings decided before it needs its factors.
+#   * anything historically muddy. A factor without a citation is exactly what
+#     D4 was written against, and the generator refuses an entry without a
+#     source anyway (D8).
+quantities:
+  - package: imperial
+    group: provenance
+    doc: |
+      Package imperial holds the customary units — the foot, the pound, the
+      pound-force, the pound per square inch.
+
+      It is the one generated package grouped by provenance rather than by
+      quantity (D19), so its units are on several dimensions and it declares no
+      dimension of its own. What they have in common is that they are not SI and
+      not among the non-SI units accepted for use with the SI: those — the bar,
+      the torr, the ångström — are in the quantity packages beside the units
+      they belong with, because NIST SP 811 Appendix B.8 sanctions them and this
+      catalogue audits against it.
+
+      Every factor here is exact. The international yard and pound agreement of
+      1959 defines the inch as exactly 25.4 mm and the pound as exactly
+      0.45359237 kg, and the rest follow from those by exact multiplication.
+    units:
+      - id: inch
+        go: Inch
+        dimension: {length: 1}
+        doc: exactly 25.4 millimetres, by the international agreement of 1959
+        symbol: {form: static, text: in}
+        factor: {num: "254", den: "10000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: foot
+        go: Foot
+        dimension: {length: 1}
+        doc: twelve inches, exactly 0.3048 metres
+        symbol: {form: static, text: ft}
+        factor: {num: "3048", den: "10000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: yard
+        go: Yard
+        dimension: {length: 1}
+        doc: three feet, exactly 0.9144 metres
+        symbol: {form: static, text: yd}
+        factor: {num: "9144", den: "10000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: mile
+        go: Mile
+        dimension: {length: 1}
+        doc: the statute mile, 5280 feet, exactly 1609.344 metres
+        symbol: {form: static, text: mi}
+        factor: {num: "1609344", den: "1000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: pound
+        go: Pound
+        dimension: {mass: 1}
+        doc: the avoirdupois pound, exactly 0.45359237 kilograms
+        symbol: {form: static, text: lb}
+        factor: {num: "45359237", den: "100000000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: ounce
+        go: Ounce
+        dimension: {mass: 1}
+        doc: the avoirdupois ounce, a sixteenth of a pound
+        symbol: {form: static, text: oz}
+        factor: {num: "45359237", den: "1600000000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: pound_force
+        go: PoundForce
+        dimension: {mass: 1, length: 1, time: -2}
+        doc: the force a pound exerts under standard gravity, exactly 4.4482216152605 newtons — a different dimension from the pound of mass, and therefore a different unit
+        symbol: {form: static, text: lbf}
+        factor: {num: "44482216152605", den: "10000000000000"}
+        source: NIST SP 811 (2008), Appendix B.6
+      - id: pound_per_square_inch
+        go: PoundPerSquareInch
+        dimension: {mass: 1, length: -1, time: -2}
+        doc: one pound-force on a square inch — the quotient is no finite decimal, which is what the exact fraction of D4 is for
+        symbol: {form: static, text: psi}
+        factor: {num: "4.4482216152605", den: "0.00064516"}
+        source: NIST SP 811 (2008), Appendix B.6

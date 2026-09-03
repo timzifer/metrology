@@ -23,13 +23,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
 
 func main() {
 	var (
-		source = flag.String("catalog", "catalog/catalog.yaml", "the catalogue to read")
+		source = flag.String("catalog", "catalog/*.yaml", "the catalogue files to read, as a glob")
 		root   = flag.String("root", ".", "the module root to write into")
 		module = flag.String("module", "github.com/timzifer/metrology", "the module path to import from")
 	)
@@ -42,21 +43,12 @@ func main() {
 }
 
 func run(source, root, module string) error {
-	raw, err := os.ReadFile(source)
+	c, err := read(source)
 	if err != nil {
 		return err
 	}
 
-	var c catalogue
-	// KnownFields: a misspelled key is a unit that silently loses its factor,
-	// which is the kind of defect a catalogue must not be able to have.
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&c); err != nil {
-		return fmt.Errorf("%s: %w", source, err)
-	}
-
-	if err := validate(&c); err != nil {
+	if err := validate(c); err != nil {
 		return err
 	}
 
@@ -81,7 +73,7 @@ func run(source, root, module string) error {
 		fmt.Printf("catgen: %s (%d units)\n", path, len(q.Units))
 	}
 
-	index, err := emitIndex(module, &c)
+	index, err := emitIndex(module, c)
 	if err != nil {
 		return fmt.Errorf("catalogue index: %w", err)
 	}
@@ -95,7 +87,7 @@ func run(source, root, module string) error {
 	}
 	fmt.Printf("catgen: %s (%d units)\n", path, len(c.units()))
 
-	table, err := emitVetTable(module, &c)
+	table, err := emitVetTable(module, c)
 	if err != nil {
 		return fmt.Errorf("unitvet table: %w", err)
 	}
@@ -109,4 +101,43 @@ func run(source, root, module string) error {
 	}
 	fmt.Printf("catgen: %s (%d units)\n", path, len(c.units()))
 	return nil
+}
+
+// read loads every catalogue file the pattern matches and merges them into one.
+//
+// The SI catalogue and the customary one are separate files (D19) and one
+// document: they are validated together, because a symbol that resolves to two
+// units is a defect whichever file each half is written in, and they are
+// generated together, because the index and the unitvet table hold all of it.
+//
+// The files are read in sorted order so that two runs produce the same bytes,
+// which is what CI checks by looking for a dirty tree afterwards.
+func read(pattern string) (*catalogue, error) {
+	paths, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, err
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("%s: no catalogue file", pattern)
+	}
+	sort.Strings(paths)
+
+	merged := &catalogue{}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		var c catalogue
+		// KnownFields: a misspelled key is a unit that silently loses its
+		// factor, which is the kind of defect a catalogue must not be able to
+		// have.
+		decoder := yaml.NewDecoder(bytes.NewReader(raw))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&c); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		merged.Quantities = append(merged.Quantities, c.Quantities...)
+	}
+	return merged, nil
 }

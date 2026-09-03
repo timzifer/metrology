@@ -13,7 +13,8 @@ dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
 **The library is complete for its stated scope.** The core computes, the
-catalogue holds 82 units across 43 quantity packages — all seven SI base units,
+catalogue holds 82 units across 43 quantity packages, plus 8 customary units in
+`units/imperial` (D19) — all seven SI base units,
 all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
 and writes (`metrology` writes, `parse` reads), and `unitvet` checks dimensions
