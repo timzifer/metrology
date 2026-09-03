@@ -10,7 +10,7 @@
 | **State** | complete for the scope of section 6; `v1.0.0` awaits the API review of section 7 |
 
 This document holds the architecture and the reasoning behind it. The decisions
-are numbered D1 … D15 and referenced from code comments; a change that
+are numbered D1 … D17 and referenced from code comments; a change that
 contradicts one updates the decision first, in the same pull request, with the
 reason. Silent divergence between this document and the code is the failure mode
 it exists to prevent.
@@ -256,6 +256,14 @@ lumen are both J. A string tag rather than an enum, because the catalogue is
 data (D8) and the set of quantities is open — the whole SI needs nine tags, and
 none of them touches a line of the core.
 
+The tag is a `string` and the type is open, but the *spellings this catalogue
+uses* are not left to a string literal at the call site: every tagged package
+declares its own — `frequency.Quantity`, `activity.Quantity` — and the generator
+writes the unit definitions in terms of that same constant, so a package has one
+spelling of the fact rather than two. A caller with a catalogue of its own
+declares its own constants; the type stays open, the *names* are owned by
+whoever generated them (D16).
+
 The zero `Quantity` is untagged, and untagged is compatible with everything.
 That is not laxity, it is the only workable rule: multiplication and division
 drop the tag, so *every computed magnitude is untagged*, and a rule that refused
@@ -281,6 +289,12 @@ that tries to guess will guess wrong. Naming the result is an explicit, checked
 conversion — `q.To(pressure.Pascal)`, or `catalog.Canonical` for the unit that
 dimension resolves to. Absolute values may not be multiplied at all: 20 °C times
 2 is physically meaningless and returns an error.
+
+The drop is unconditional and stays that way: the tag a becquerel loses to a
+product is a tag the run time cannot get back, and putting it back would be the
+guessing this rule exists to forbid. What *can* remember it is the static
+checker, which walks the operands anyway — D16 has the case and the three rules
+that keep it provable.
 
 **An interval unit may not carry an offset.** An offset is what makes a scale
 affine, and an affine scale measures points. Rejecting the combination at
@@ -601,12 +615,18 @@ columns are asserted:
 | assignment to local variables, then `p.Sub(t)` | reported |
 | `temperature.Celsius.Of(20).Add(temperature.Celsius.Of(5))` | reported — the affine rule of D6 |
 | `frequency.Hertz.Of(50).To(activity.Becquerel)` | reported — the quantity tag of D6 |
+| `becquerel.Mul(ratio)`, then `.Add(hertz)` | reported — the dropped tag of D16; the run time accepts it |
+| the same across a package boundary | reported — the fact carries the provenance |
+| `becquerel.Mul(metre)`, then `.Div(metre)`, then `.Add(hertz)` | silent — the dimension changed, so the tag is gone for good |
+| a plane angle times a solid angle, then converted | silent — two surviving tags disagree, which is no answer |
 | a unit computed with `Div`, `Per` or `Pow`, then used | reported — the walk follows the composition |
 | operand from another package's function with an invariant unit | reported, via facts |
 | same dimension, different units (`bar` + `Pa`) | correctly silent |
 | unit chosen at runtime (`if x { u = Bar }`) | silent — SSA φ-node, not provable |
 | operand arriving as a function parameter | silent — unknown origin |
 | a unit from the caller's own catalogue | silent — not in the generated table |
+| `dose.Sievert = length.Metre` | reported — the write is what makes the table untrue |
+| a write to a variable of the program's own | silent — the resolver never trusted it |
 | a unit held in a map, a slice or a struct field | silent |
 | `25 °C − 20 °C`, then the result used | silent — the interval unit is not in the table |
 | a method value, `add := m.Add` | silent — the receiver is bound out of sight |
@@ -621,16 +641,30 @@ hertz converted into a becquerel. Those are the same walk with a different
 comparison, and leaving them out would have shipped a checker that had the
 information to prove `20 °C + 5 °C` wrong and declined to say so. Every rule the
 pass applies is one the run time applies, in the order the run time applies it,
-so a diagnostic and the error it predicts never disagree. What is *not* checked
+so a diagnostic and the error it predicts never disagree — with the single
+exception D16 adds, the tag a product dropped, which the run time has no way
+left to see and which says so in its own message. What is *not* checked
 is a declared result unit for `Div`: the quotient carries the unit its operands
 gave it and is named in a separate, checked step.
 
-**Four resolution rules that are easy to get wrong.**
+**Six resolution rules that are easy to get wrong.**
 
 - **A unit is trusted only where the catalogue names it.** The resolver reads a
   package-level variable when — and only when — the generated table has it, which
   is what keeps the pass from assuming a variable it does not know is never
   written to. A program with a catalogue of its own is silent rather than wrong.
+- **The trust that remains is checked, not assumed.** A catalogue unit is an
+  exported package-level variable, and Go lets an importer assign to it (D7 keeps
+  these variables deliberately: a function would rebuild its decimals on every
+  call, and `pressure.Bar` is how callers write it). Resolving one by name
+  therefore assumes nobody writes to it — so a direct store to a catalogue unit
+  is itself reported, at the write rather than at the uses it invalidates. What
+  it costs the program is small and local: the catalogue's own maps hold copies
+  taken at init, so `catalog.BySymbol("Sv")` still answers with the sievert while
+  the variable no longer does. What it costs this pass is the whole proof, which
+  is why the rule is here and not in a comment. A write through a pointer taken
+  elsewhere, or one inside a dependency the vet run does not cover, stays out of
+  reach.
 - **A forbidden operation has no result.** `Add` on two absolute magnitudes
   returns the zero `Measurement`, so the walk stops there rather than propagating
   the scale it would have had. One mistake reports once; without this a single
@@ -642,6 +676,12 @@ gave it and is named in a separate, checked step.
   the pass says nothing about the result rather than guessing. Recording the
   declared interval unit in the table would close this; it is a table entry, not
   a redesign.
+- **A dropped tag is provenance, not a tag.** The checker records the quantity a
+  product discarded, and never claims the value still carries it: an untagged
+  T⁻¹ computed from a becquerel converts into a curie without a word, and only a
+  *conflicting* tag is reported (D16). Merging the two fields would turn every
+  legitimate naming of a computed magnitude into a diagnostic, which is the
+  false-positive failure this pass is built to avoid.
 - **A method value is refused, not unpacked.** It binds the receiver into a
   closure and calls a wrapper without it, and the wrapper carries the original
   method's own object — so reading the operands off such a call by position reads
@@ -830,6 +870,333 @@ surface or ships behind it.
 
 ---
 
+### D16 — The quantity tag is identity, and `unitvet` follows the tag a product drops
+
+D6 gave `Quantity` three behaviours that were each defensible on their own and
+never reconciled: `Unit.Equal` compares the tag, `Add`, `Sub`, `Cmp` and `To`
+refuse a conflict, `Mul` and `Div` throw the tag away, and `parse` puts one back
+by looking the expression's scale up in a catalogue. Before the type can be
+frozen (section 7) it has to mean one thing.
+
+**It means identity.** A hertz and a becquerel are both T⁻¹ and are not the same
+measurement; treating one as the other is a wrong number delivered with
+confidence, which is the failure this library exists to prevent. So the tag is
+part of what a unit *is*, not a label on it, and the run time already enforces
+that: `sameQuantity` guards every additive operation and `Engine.To` guards
+every conversion. Nothing in the core changes.
+
+**The untagged wildcard is not an exception to it, it is what makes it usable.**
+Multiplication and division drop the tag — they must, because a becquerel times
+a metre is not anything the catalogue names — so every computed magnitude is
+untagged, and a rule that refused to let an untagged magnitude meet a tagged one
+would make each computation a dead end. The wildcard is the price of the drop,
+and it is worth paying at the run time, where the alternative is a library in
+which no quotient can ever be named.
+
+**But it opens a hole, and the hole is static.** The tag can be laundered:
+
+```go
+scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
+_, _ = scaled.Add(frequency.Hertz.Of(50))          // accepted at run time
+```
+
+The product left the dimension untouched and dropped the tag, so what reaches
+the sum is an untagged T⁻¹ and the wildcard lets it through. The magnitude is
+still a radioactivity. The run time cannot know that — it holds a value, a unit
+and a dimension, and the tag it discarded is gone — and giving it a memory would
+mean putting the tag back into `Mul` and `Div`, which is exactly the guessing D6
+forbids and would make the product of a torque and an angle a torque.
+
+**`unitvet` has the information the run time discarded.** It walks the operands
+backwards anyway (D13), so it can carry the dropped tag as *provenance*: the
+quantity a multiplicative operation discarded while leaving the dimension
+intact. That provenance conflicts with a real tag exactly where the discarded
+one would have:
+
+```
+app/app.go:12:9: Add on incompatible quantities: a magnitude computed from
+                 radioactivity and frequency; Mul and Div drop the tag (D6),
+                 so the run time no longer sees the conflict
+```
+
+**Three rules keep it provable rather than clever.**
+
+- **Provenance survives only where the dimension does.** A becquerel scaled by a
+  plain number is still a radioactivity; a becquerel times a metre is a T⁻¹L¹
+  that names no quantity, and dividing the metre back out does not recover one.
+  Where the result dimension differs from the operand's, the tag is gone for
+  good and the checker forgets it too.
+- **Two surviving tags that disagree are no answer.** A plane angle times a
+  solid angle is dimensionless and is neither, so the product carries no
+  provenance rather than one of the two.
+- **It is provenance, never a tag.** The checker never claims the value *is* a
+  radioactivity — it is not, the arithmetic untagged it, and `To(activity.Curie)`
+  on it is legal and stays silent. The two fields are separate for the same
+  reason `Kind` and `Quantity` are.
+
+**This is the one diagnostic that predicts no run-time error**, and it is the
+reason this is a decision rather than a rule inside D13. Everywhere else the
+pass and the run time agree by construction, and a reader who runs the code can
+confirm the diagnostic. Here the code runs and produces a number, and the
+message says so in its own text, because a checker that reports something the
+reader cannot reproduce is a checker the reader stops believing. The escape is
+the one D13 already ships: `//unitvet:ignore` on the line, with a reason, for
+the case where the reinterpretation is deliberate.
+
+**The namespace follows from it.** If the tag is identity then a string literal
+at a call site is a second spelling of an identity, with nothing to keep the two
+in step — so every tagged package declares the constant and `catgen` writes the
+unit definitions from it:
+
+```go
+const Quantity metrology.Quantity = "frequency"   // frequency/frequency_gen.go
+
+u, ok := catalog.Canonical(dim, kind, frequency.Quantity)
+```
+
+It goes in the quantity package rather than in `catalog`, because that is the
+package a caller already imports for the units, and reaching a tag through
+`catalog` would pull all forty-three quantity packages in behind it. The tags
+are therefore *reserved names of this catalogue*, not of the type: `Quantity`
+stays a `string` and a caller's own catalogue declares its own constants for its
+own tags. Two catalogues in one program that spell one dimension differently are
+still two namespaces, and D6's compatibility rule still compares spellings
+across them — but each side now has one place where its spelling is written
+down, which is what makes a collision something a person can look up.
+
+**What it does not settle.** One question from section 7 stays open, and it is
+the text boundary of D12: `50 Hz` reads back tagged and `50 s⁻¹` reads back
+untagged for the same scale, because the text form cannot carry a tag of its own
+(section 8). D16 says what the tag is and who owns the spelling; how it survives
+serialisation is still a v1 question.
+
+### D17 — One arithmetic, and a fast path made of integers
+
+This was O2, and it had to be answered before `v1.0.0` because only half of it
+is additive: parameterising `Measurement` later renames every type in the API,
+while the other half is invisible in the API and can land at any time.
+
+Two proposals travel under one name and they do not have the same answer. One
+hands the arithmetic in from outside; the other keeps one arithmetic and lets a
+magnitude be a machine integer when it can be. The first is refused below on a
+measurement, the second is not.
+
+#### Reading 1 — the arithmetic passed in from outside
+
+`apd.Decimal` by default and, where a simulation wants speed over exactness, a
+float-backed implementation passed in its place — as an interface, or as a type
+parameter of `Measurement`.
+
+Both readings were measured, on `bench_test.go` and on prototypes of each shape;
+the numbers are in section 11. `BenchmarkKernel` was added for this question and
+stays, because it is the comparison a reader will want to repeat before asking
+it again.
+
+**A fast mode is a change of representation, not a change of operations.** This
+is the finding that settles most of the question. Take the proposal literally —
+keep `val apd.Decimal` in the struct and swap the operations behind a facade —
+and the float backend has to unpack a decimal, compute, and pack a decimal
+again. That costs **327 ns against the 44 ns of the decimal multiplication it
+replaces**: the fast arithmetic is seven times slower than the exact arithmetic
+it was brought in to avoid. A facade over the operations cannot be fast, in any
+of its spellings, because the representation is where the time is.
+
+What *is* fast is a type parameter, because it changes the storage: a magnitude
+held as `float64` behind a `Backend[V]` constraint multiplies in **1.6 ns with no
+allocation**, and Go 1.27 does permit the generic method of D10 on such a type
+(verified, section 11). The interface spelling of the same idea — a magnitude
+behind a `Value` interface — costs 18 ns and one allocation per operation, which
+is D1's boxing argument in this exact setting.
+
+**What the type parameter costs the rest of the design.** `Measurement[V, B]`
+does not stay in `measurement.go`:
+
+- **The catalogue instantiates.** The 82 units of section 6 are package-level
+  `var`s of type `metrology.Unit` across 43 quantity packages (D7, D8). Generic,
+  each of them is *one* instantiation, so a second backend needs a second set —
+  the generator emits every quantity package twice, or the fast units are
+  converted from the exact ones at run time. If it is conversion, the type
+  parameter bought nothing a separate type would not have given.
+- **`parse` instantiates with it.** `parse.Text` embeds `metrology.Measurement`
+  and `parse.Measurement(text)` returns one, so both become generic and both
+  have to pick a backend at the package-level entry points of D12.
+- **`unitvet` resolves by type name.** The pass looks `Measurement`, `Unit` and
+  `Engine` up in the core's scope and compares receiver types; with a generic
+  receiver every one of those is an instantiation needing `Origin()`
+  normalisation. Section 11 already records an hour lost to exactly that class
+  of bug with `Of[float64]`, and that was for a method alone.
+- **Every user signature instantiates.** `func f(m metrology.Measurement)`
+  becomes a spelling with a backend in it. A generic alias hides the spelling,
+  not the fact that two backends are two types — which is D1's
+  heterogeneous-storage row a second time.
+
+**And the text form would stop being honest.** A float-backed magnitude marshals
+through the same `MarshalText` as an exact one. A thousand additions of 0.1 bar
+is `100.0 bar` in the core and `99.9999999999986 bar` in `float64`; both are
+well-formed text, both parse, and *nothing in the string says which engine
+produced it*. D12 makes text the exchange format, so an approximate value that
+carries no mark of its provenance is the failure mode the whole D2–D4 chain
+exists to prevent — arriving through the one door the design opened on purpose.
+
+**The workload measurement, which is what actually decides it.** A window of 64
+readings multiplied and summed:
+
+| Kernel | Time | Allocations |
+|---|---:|---:|
+| every intermediate a `Measurement` (`BenchmarkKernel/Exact`) | 58 900 ns | 769 |
+| a full fast mode (prototype: float magnitude, float unit) | 5 900 ns | 64 |
+| **units left at the boundary** (`BenchmarkKernel/Boundary`) | **849 ns** | **6** |
+
+The third row is principle 3 written out, it is available today through
+`In[float64]`, and it is **seven times faster than the fast mode** — because a
+fast mode still builds a result unit on every operation, while the boundary
+crosses twice for the whole loop. A swapped-in arithmetic is therefore not the
+fast option. It is the option that keeps the dimension check *inside* the loop,
+and that, not speed, is the only thing it sells.
+
+**On this reading the answer is no: do not parameterise the core.** Should the
+dimension check inside the loop turn out to be worth paying for, it belongs in a
+concrete type of its own — `metrology/fast`, built from catalogue units at the
+boundary, with no `MarshalText` and an explicitly named lossy readout. That
+shape costs the core nothing, needs no second catalogue, leaves `unitvet` and
+`parse` alone, and — being additive — can be decided *after* `v1.0.0`.
+Parameterising cannot: it renames every type in the API.
+
+#### Reading 2 — a magnitude that is sometimes a machine integer
+
+The other proposal keeps *one* arithmetic and changes what a magnitude is held
+in: an `int64` coefficient with an exponent where the value fits one, an
+`apd.Decimal` otherwise. `Add`, `Sub` and `Mul` check whether both operands are
+the cheap form and take the shortcut; anything else promotes both to decimals
+and runs the path that exists today. Nothing is passed in and nothing is
+chosen — the value decides, at run time, and the caller never sees which path
+ran.
+
+That difference is the whole difference. Reading 1 asks a caller to trade
+exactness for speed; reading 2 trades nothing, because **the shortcut computes
+what the slow path would have computed**. Measured, on the accumulation the
+fast path exists for — 64 additions on one scale:
+
+| 64 additions | Time | Allocations |
+|---|---:|---:|
+| the core today | 23 500 ns | 257 |
+| the core with the identity precheck below | 17 800 ns | 257 |
+| **an `int64` fast path (prototype)** | **2 440 ns** | **0** |
+| units left at the boundary, for reference | 605 ns | 5 |
+
+Nine times, and every allocation gone: an integer magnitude has no coefficient
+slice to share, so the defensive copy D3 exists for has nothing to copy and
+`Reduce` has nothing to reduce. The boundary is still faster, but it is the row
+that gives up both the dimension check and the exact arithmetic; this one gives
+up neither. That is what reading 1 could not offer.
+
+**Three conditions, and the third is the one that surprises.**
+
+**It has to hold an integer, not a float.** An `int64` coefficient with an
+exponent *is* a decimal, so `0.1 + 0.2` is `0.3` down both paths and a thousand
+additions of 0.1 is exactly 100. A `float64` shortcut answers
+`0.30000000000000004` and `99.999999999998593` — the same expression with two
+answers, decided by how the operands happened to be constructed, invisible to
+the caller and to the text form of D12. A fast path that is not the same
+arithmetic is reading 1 wearing a different hat.
+
+**It has to be a tagged struct, not an interface member.** With the magnitude
+behind a `NumericHolder` interface the shortcut measures 60 ns and **allocates
+16 bytes per value**, because a non-pointer value stored in an interface
+escapes; as a tagged field of the struct it measures 45 ns and allocates
+nothing. This is D1's argument arriving a third time, and it is worth being
+exact about: the *type switch* is not the cost — the boxing is.
+
+**It needs no generics at all.** `Measurement` stays one concrete type, the
+catalogue stays one set of `var`s, the generator emits exactly what it emits
+today, and `parse` and `unitvet` are untouched. The tag is a field, and a field
+is not a type parameter. Every cost that made reading 1 unaffordable is absent
+here — which is the strongest single argument for this reading and the reason
+it is worth separating the two proposals rather than answering them together.
+
+**Where the fast path stops, which bounds what it can be sold as.** It covers
+addition, subtraction, comparison and multiplication — a product of two
+coefficients is exact until it overflows. It does **not** cover division, which
+is not exact in general, and it does not survive a conversion: a magnitude that
+has been through the single division of D4 carries twenty significant digits
+and no longer fits an `int64`. So a loop that converts on every iteration falls
+off the fast path on the first one and never returns to it. And a product chain
+keeps a cost the fast path cannot touch: `Mul` rebuilds the result unit every
+time, so the kernel of reading 1 measures 20 700 ns on the fast path against
+849 ns at the boundary. The magnitude was never the expensive part of a
+product — see below.
+
+**What it costs.** `Measurement` grows from 152 to 176 bytes. Every arithmetic
+operation gains a promotion branch, and D14 wants each of them tested: both
+forms, mixed forms, overflow, mismatched exponents. The aliasing guard of D3
+grows a second form to guard. None of that is structural, which is exactly what
+separates it from reading 1.
+
+**The decision.** Reading 1: **no** — the core is not parameterised, and no
+arithmetic is passed into it in any spelling. Reading 2: **yes**, as a tagged
+field behind the existing API — no interface, no type parameter, integers only.
+Its prerequisite is the identity check below, which is done and was most of its
+cost. Being invisible in the API it is additive and does not have to precede
+`v1.0.0`; being invisible in the API is also why it must not change a single
+answer, and the test that says so is that the fast and slow paths agree on every
+operand pair.
+
+#### The prerequisite both readings kept running into — done
+
+`Unit.Equal` cross-multiplied two factor fractions to answer whether two units
+are the same scale, and that answer is on the path of every same-unit addition,
+every comparison and every conversion into a unit a value already holds. Two
+references to one catalogue `var` share their decimals, so the pointers answer
+the question before the arithmetic does — and D3 is what makes reading them
+sound rather than lucky: nothing ever writes to a unit's decimals, so sharing a
+pointer means holding the same number for as long as both units exist. Without
+D3 it would be a cache with no invalidation.
+
+`sameScale` in `unit.go` now asks the pointers first. Measured back to back on
+one machine, medians of seven runs:
+
+| | before | after |
+|---|---:|---:|
+| `Cmp` | 154 ns | 75 ns |
+| conversion into the same unit | 240 ns | 110 ns |
+| `Add` | 371 ns | 284 ns |
+| `Sub` | 377 ns | 302 ns |
+| the `int64` fast path of reading 2 (prototype) | 105 ns | 45 ns |
+
+The last row is why this belonged in the decision rather than in a later patch:
+without it **the unit check is most of the fast path**, and a fast path built on
+top of it would have been measuring `Unit.Equal` instead of the arithmetic it
+set out to avoid.
+
+**What it does not reach, which is the same boundary reading 2 ran into.** The
+shortcut fires when both operands name the same unit *object*. A unit a `Mul`
+just built is a fresh object with fresh decimals, so an accumulation of computed
+products — `BenchmarkKernel/Exact` — compares two equal-but-distinct units on
+every iteration and pays the cross multiplication anyway. The two findings are
+one finding seen twice: the library recomputes units it already has, and both a
+magnitude fast path and an identity check stop at that.
+
+**Where the rest of the exact core's headroom is.** Of the 480 ns of a `Mul`,
+**229 ns and half the allocations are the unit half** — the exact multiplication
+of two factor fractions (D4), which `BenchmarkCompose/Times` measures on its
+own — against some 50 ns for the magnitude. That fraction is invariant across a
+loop and is rebuilt on every iteration anyway. It is the one place where the
+library recomputes something it already knows, and no fast path for magnitudes
+reaches it.
+
+
+**What the decision freezes, and what it leaves free.** `Measurement` and
+`Unit` stay concrete, single-arithmetic types, and that is a `v1.0.0` promise:
+there is no `Backend`, no `Value` interface and no type parameter, now or
+later. Everything else here is additive and needs no second decision — the
+`int64` fast path may land in any `v0.x` or long after `v1.0.0` without
+changing a signature, and so may a concrete `metrology/fast` if the in-loop
+dimension check ever turns out to be worth paying for. Reopening this means
+running `BenchmarkKernel` first: it is in the tree so that the comparison can
+be repeated rather than re-argued.
+
+---
+
 ## 4. The API
 
 The shape, in the vocabulary the decisions establish. Runnable examples live in
@@ -1007,6 +1374,7 @@ Everything the decisions describe is implemented and enforced:
 | Text form: writing, `parse`, JSON, SQL | complete; the round-trip property holds across the whole catalogue and the parser is fuzzed against it |
 | `unitvet` | complete; the corpus asserts the reported and the silent cases alike, and the pass runs clean over this repository, tests and examples included |
 | Coverage gate | 100 % of hand-written statements, enforced in CI, `COVERAGE_EXCEPTIONS.md` empty |
+| The `int64` fast path (D17) | **decided, not built.** It is additive and invisible in the API, so it does not gate `v1.0.0`; what D17 fixes is that there is no type parameter and no facade to build it behind |
 | `uncertainty` (D15) | **decided, not built.** The package, the outward rounding it needs from `Engine`, its text form and its `unitvet` receiver are all specified in D15 and none of them exists yet |
 
 **What remains before `v1.0.0` is a deliberate API review.** Until it happens the
@@ -1020,26 +1388,25 @@ at minimum:
   the substitute for a compile error
 - whether `parse.Text` is the right shape for the decoding boundary, or whether a
   parser-typed destination generated per catalogue would serve better
-- what `Quantity` promises. It is a `string` (D6), so the tag is open by
-  construction: a caller's catalogue may spell `"frequency"` and mean whatever it
-  likes by it, and nothing links `metrology.Quantity("frequency")` to the
-  catalogue entry of the same name — the tags are YAML data, not exported
-  constants, and ten of the eighty-two units carry one. Three questions have to
-  get one consistent answer before the type is frozen:
-  **Is a quantity part of a unit's identity or an interpretation of it?**
-  `Unit.Equal` compares the tag, arithmetic drops it (D6), and `parse` restores
-  it by looking the expression's scale up in the catalogue. Those are three
-  different answers today, defensible one at a time; the review has to say which
-  one the type means.
-  **Whose namespace is it?** Either the tags this module ships are reserved
-  names with a documented meaning — in which case they belong in generated
-  constants rather than in string literals, and a caller redefining one is doing
-  something the library can name — or they are local to a catalogue, in which
-  case two catalogues in one program may tag the same dimension differently and
-  the compatibility rule of D6 is comparing spellings across namespaces that
-  never agreed to share one.
+- what `Quantity` promises. **Two of its three questions are answered** (D16),
+  and one is left. **Is a quantity part of a unit's identity or an
+  interpretation of it?** Identity. A hertz is not a becquerel; the run time
+  refuses the conflict in every additive operation and every conversion, and
+  `unitvet` now follows the tag through the products that drop it. The type
+  stays a `string`, because the catalogue is data (D8) and the set of quantities
+  is open — ten of the eighty-two units carry a tag.
+  **Whose namespace is it? Answered with the first** (D16): the tags this module
+  ships are reserved names of *this catalogue*, and every tagged package now
+  declares one — `frequency.Quantity` — with the unit definitions generated from
+  the same constant. They are not reserved names of the *type*: `Quantity` stays
+  a `string`, and a caller's catalogue declares its own. Two catalogues in one
+  program may still tag one dimension differently, and D6's rule still compares
+  spellings across them; what changed is that each side has one place where its
+  spelling is written down.
   **What does untagged mean at a boundary?** Inside the core it is the wildcard
-  that keeps a computed magnitude nameable, and that is settled. Crossing D12 it
+  that keeps a computed magnitude nameable, and that is settled — D16 says why,
+  and moves the enforcement the wildcard gives up into the static checker.
+  Crossing D12 it
   is what an expression carries when no catalogue entry spells it: `50 Hz` reads
   back tagged `frequency`, `50 s⁻¹` reads back untagged, and the two are the same
   scale. The text form cannot carry a tag of its own (section 8), so the spelling
@@ -1054,11 +1421,11 @@ at minimum:
   decided (D15) and unbuilt, and freezing the core while the first serious
   consumer of it is unwritten is how an API gains a regret
 - `O1` in section 10, which decides whether `imperial` is a subpackage or a module
-- `O2` in section 10, which decides whether the arithmetic is a type parameter of
-  `Measurement`. Only that half of it cannot be deferred past `v1.0.0` —
-  parameterising the core later renames every type in the API, and the
-  recommendation is precisely not to. The adaptive fast path O2 measures
-  alongside it is invisible in the API and can land whenever
+
+What the review no longer has to settle is whether the arithmetic is a type
+parameter of `Measurement`: D17 says it is not, and that was the one open
+question whose answer could not be deferred past `v1.0.0`. The `int64` fast path
+it leaves open is invisible in the API and lands whenever it is written.
 
 `cmd/unitvet` is versioned with the library but breaks nothing on its own: it is
 additive, opt-in, and can ship a new version independently.
@@ -1084,9 +1451,10 @@ additive, opt-in, and can ship a new version independently.
 | Risk | Mitigation |
 |---|---|
 | The aliasing invariant breaks unnoticed | It is the one rule whose violation causes silent data corruption. Hence the dedicated guard test of D3, using values above 38 digits — below that threshold apd/v3 masks the bug. |
-| Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it, and why `BenchmarkKernel` measures that boundary as faster than any arithmetic swapped in behind it (O2). If it binds, the escape is a fast path for values that fit losslessly in `int64`, which O2 now measures rather than proposes: nine times on an accumulation, no allocations, and the same answer as the slow path — not a return to `float64`, which O2 measures as slower than the boundary it would replace and as a different arithmetic besides. |
+| Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it, and why `BenchmarkKernel` measures that boundary as faster than any arithmetic swapped in behind it (D17). If it binds, the escape is a fast path for values that fit losslessly in `int64`, which D17 measures rather than proposes: nine times on an accumulation, no allocations, and the same answer as the slow path — not a return to `float64`, which D17 measures as slower than the boundary it would replace and as a different arithmetic besides. |
 | Kind semantics proliferate | Every new kind needs a justification in the catalogue. No dimension collision and no affinity, no kind. |
 | `unitvet` produces a false positive | The one failure mode that kills the tool, because users disable it and then get nothing. Every rule must be provable before it reports; `analysistest` asserts the silent cases as explicitly as the reported ones. Prefer missing a real bug over inventing one. |
+| The dropped-tag rule of D16 becomes a false positive | It is the one diagnostic that predicts no run-time error, so it is the one rule whose noise would be indistinguishable from a bug in the checker. Held down by the two limits D16 states — provenance dies with the dimension, and two disagreeing tags leave none — both asserted in the silent half of the corpus. If it ever reports a deliberate reinterpretation more often than a mistake, the rule goes, not the marker that silences it. |
 | `unitvet` drifts from the library | Prevented by construction: its dimension table is generated from the catalogue of D8, in the same `go generate` run. A hand-maintained second table would be the defect waiting to happen. |
 | The coverage target degrades into assertion-free tests | The known failure mode of a 100 % rule. Mitigated by keeping the correctness weight in property and golden tests, and by treating a coverage-only test in review as a defect. If the number is ever met by tests that assert nothing, the rule has done harm. |
 | Go 1.27 as a minimum deters adopters | Accepted deliberately. The fallback is free functions instead of generic methods — a cost in ergonomics, not in substance. |
@@ -1094,6 +1462,10 @@ additive, opt-in, and can ship a new version independently.
 ---
 
 ## 10. Open questions
+
+O2 — a swappable arithmetic or an adaptive fast path — was the second entry
+here and is now D17: no type parameter and no facade, one arithmetic, and an
+`int64` fast path that is additive and does not gate `v1.0.0`.
 
 ### O1 — Non-SI units: subpackage or separate module?
 
@@ -1116,217 +1488,6 @@ distinction visible is worth doing. A subpackage with its own catalogue file and
 its own source column achieves it without a second module path, a second release
 cadence and a second CI pipeline.
 
-### O2 — A fast mode: swappable arithmetic, or an adaptive fast path?
-
-**Status:** open, with a recommendation; decide before `v1.0.0`
-
-Two proposals travel under one name and they do not have the same answer. One
-hands the arithmetic in from outside; the other keeps one arithmetic and lets a
-magnitude be a machine integer when it can be. The first is refused below on a
-measurement, the second is not.
-
-#### Reading 1 — the arithmetic passed in from outside
-
-`apd.Decimal` by default and, where a simulation wants speed over exactness, a
-float-backed implementation passed in its place — as an interface, or as a type
-parameter of `Measurement`.
-
-Both readings were measured, on `bench_test.go` and on prototypes of each shape;
-the numbers are in section 11. `BenchmarkKernel` was added for this question and
-stays, because it is the comparison a reader will want to repeat before asking
-it again.
-
-**A fast mode is a change of representation, not a change of operations.** This
-is the finding that settles most of the question. Take the proposal literally —
-keep `val apd.Decimal` in the struct and swap the operations behind a facade —
-and the float backend has to unpack a decimal, compute, and pack a decimal
-again. That costs **327 ns against the 44 ns of the decimal multiplication it
-replaces**: the fast arithmetic is seven times slower than the exact arithmetic
-it was brought in to avoid. A facade over the operations cannot be fast, in any
-of its spellings, because the representation is where the time is.
-
-What *is* fast is a type parameter, because it changes the storage: a magnitude
-held as `float64` behind a `Backend[V]` constraint multiplies in **1.6 ns with no
-allocation**, and Go 1.27 does permit the generic method of D10 on such a type
-(verified, section 11). The interface spelling of the same idea — a magnitude
-behind a `Value` interface — costs 18 ns and one allocation per operation, which
-is D1's boxing argument in this exact setting.
-
-**What the type parameter costs the rest of the design.** `Measurement[V, B]`
-does not stay in `measurement.go`:
-
-- **The catalogue instantiates.** The 82 units of section 6 are package-level
-  `var`s of type `metrology.Unit` across 43 quantity packages (D7, D8). Generic,
-  each of them is *one* instantiation, so a second backend needs a second set —
-  the generator emits every quantity package twice, or the fast units are
-  converted from the exact ones at run time. If it is conversion, the type
-  parameter bought nothing a separate type would not have given.
-- **`parse` instantiates with it.** `parse.Text` embeds `metrology.Measurement`
-  and `parse.Measurement(text)` returns one, so both become generic and both
-  have to pick a backend at the package-level entry points of D12.
-- **`unitvet` resolves by type name.** The pass looks `Measurement`, `Unit` and
-  `Engine` up in the core's scope and compares receiver types; with a generic
-  receiver every one of those is an instantiation needing `Origin()`
-  normalisation. Section 11 already records an hour lost to exactly that class
-  of bug with `Of[float64]`, and that was for a method alone.
-- **Every user signature instantiates.** `func f(m metrology.Measurement)`
-  becomes a spelling with a backend in it. A generic alias hides the spelling,
-  not the fact that two backends are two types — which is D1's
-  heterogeneous-storage row a second time.
-
-**And the text form would stop being honest.** A float-backed magnitude marshals
-through the same `MarshalText` as an exact one. A thousand additions of 0.1 bar
-is `100.0 bar` in the core and `99.9999999999986 bar` in `float64`; both are
-well-formed text, both parse, and *nothing in the string says which engine
-produced it*. D12 makes text the exchange format, so an approximate value that
-carries no mark of its provenance is the failure mode the whole D2–D4 chain
-exists to prevent — arriving through the one door the design opened on purpose.
-
-**The workload measurement, which is what actually decides it.** A window of 64
-readings multiplied and summed:
-
-| Kernel | Time | Allocations |
-|---|---:|---:|
-| every intermediate a `Measurement` (`BenchmarkKernel/Exact`) | 58 900 ns | 769 |
-| a full fast mode (prototype: float magnitude, float unit) | 5 900 ns | 64 |
-| **units left at the boundary** (`BenchmarkKernel/Boundary`) | **849 ns** | **6** |
-
-The third row is principle 3 written out, it is available today through
-`In[float64]`, and it is **seven times faster than the fast mode** — because a
-fast mode still builds a result unit on every operation, while the boundary
-crosses twice for the whole loop. A swapped-in arithmetic is therefore not the
-fast option. It is the option that keeps the dimension check *inside* the loop,
-and that, not speed, is the only thing it sells.
-
-**On this reading the answer is no: do not parameterise the core.** Should the
-dimension check inside the loop turn out to be worth paying for, it belongs in a
-concrete type of its own — `metrology/fast`, built from catalogue units at the
-boundary, with no `MarshalText` and an explicitly named lossy readout. That
-shape costs the core nothing, needs no second catalogue, leaves `unitvet` and
-`parse` alone, and — being additive — can be decided *after* `v1.0.0`.
-Parameterising cannot: it renames every type in the API.
-
-#### Reading 2 — a magnitude that is sometimes a machine integer
-
-The other proposal keeps *one* arithmetic and changes what a magnitude is held
-in: an `int64` coefficient with an exponent where the value fits one, an
-`apd.Decimal` otherwise. `Add`, `Sub` and `Mul` check whether both operands are
-the cheap form and take the shortcut; anything else promotes both to decimals
-and runs the path that exists today. Nothing is passed in and nothing is
-chosen — the value decides, at run time, and the caller never sees which path
-ran.
-
-That difference is the whole difference. Reading 1 asks a caller to trade
-exactness for speed; reading 2 trades nothing, because **the shortcut computes
-what the slow path would have computed**. Measured, on the accumulation the
-fast path exists for — 64 additions on one scale:
-
-| 64 additions | Time | Allocations |
-|---|---:|---:|
-| the core today | 23 500 ns | 257 |
-| the core with the identity precheck below | 17 800 ns | 257 |
-| **an `int64` fast path (prototype)** | **2 440 ns** | **0** |
-| units left at the boundary, for reference | 605 ns | 5 |
-
-Nine times, and every allocation gone: an integer magnitude has no coefficient
-slice to share, so the defensive copy D3 exists for has nothing to copy and
-`Reduce` has nothing to reduce. The boundary is still faster, but it is the row
-that gives up both the dimension check and the exact arithmetic; this one gives
-up neither. That is what reading 1 could not offer.
-
-**Three conditions, and the third is the one that surprises.**
-
-**It has to hold an integer, not a float.** An `int64` coefficient with an
-exponent *is* a decimal, so `0.1 + 0.2` is `0.3` down both paths and a thousand
-additions of 0.1 is exactly 100. A `float64` shortcut answers
-`0.30000000000000004` and `99.999999999998593` — the same expression with two
-answers, decided by how the operands happened to be constructed, invisible to
-the caller and to the text form of D12. A fast path that is not the same
-arithmetic is reading 1 wearing a different hat.
-
-**It has to be a tagged struct, not an interface member.** With the magnitude
-behind a `NumericHolder` interface the shortcut measures 60 ns and **allocates
-16 bytes per value**, because a non-pointer value stored in an interface
-escapes; as a tagged field of the struct it measures 45 ns and allocates
-nothing. This is D1's argument arriving a third time, and it is worth being
-exact about: the *type switch* is not the cost — the boxing is.
-
-**It needs no generics at all.** `Measurement` stays one concrete type, the
-catalogue stays one set of `var`s, the generator emits exactly what it emits
-today, and `parse` and `unitvet` are untouched. The tag is a field, and a field
-is not a type parameter. Every cost that made reading 1 unaffordable is absent
-here — which is the strongest single argument for this reading and the reason
-it is worth separating the two proposals rather than answering them together.
-
-**Where the fast path stops, which bounds what it can be sold as.** It covers
-addition, subtraction, comparison and multiplication — a product of two
-coefficients is exact until it overflows. It does **not** cover division, which
-is not exact in general, and it does not survive a conversion: a magnitude that
-has been through the single division of D4 carries twenty significant digits
-and no longer fits an `int64`. So a loop that converts on every iteration falls
-off the fast path on the first one and never returns to it. And a product chain
-keeps a cost the fast path cannot touch: `Mul` rebuilds the result unit every
-time, so the kernel of reading 1 measures 20 700 ns on the fast path against
-849 ns at the boundary. The magnitude was never the expensive part of a
-product — see below.
-
-**What it costs.** `Measurement` grows from 152 to 176 bytes. Every arithmetic
-operation gains a promotion branch, and D14 wants each of them tested: both
-forms, mixed forms, overflow, mismatched exponents. The aliasing guard of D3
-grows a second form to guard. None of that is structural, which is exactly what
-separates it from reading 1.
-
-**Recommendation.** Reading 1: no. Reading 2: worth doing, as a tagged field
-behind the existing API — no interface, no type parameter, integers only —
-and worth doing *after* the free prerequisite below, which is most of its own
-cost and needs no decision at all. Being invisible in the API, it is additive
-and does not have to precede `v1.0.0`; being invisible in the API is also why it
-must not change a single answer, and the test that says so is that the fast and
-slow paths agree on every operand pair.
-
-#### The prerequisite both readings kept running into — done
-
-`Unit.Equal` cross-multiplied two factor fractions to answer whether two units
-are the same scale, and that answer is on the path of every same-unit addition,
-every comparison and every conversion into a unit a value already holds. Two
-references to one catalogue `var` share their decimals, so the pointers answer
-the question before the arithmetic does — and D3 is what makes reading them
-sound rather than lucky: nothing ever writes to a unit's decimals, so sharing a
-pointer means holding the same number for as long as both units exist. Without
-D3 it would be a cache with no invalidation.
-
-`sameScale` in `unit.go` now asks the pointers first. Measured back to back on
-one machine, medians of seven runs:
-
-| | before | after |
-|---|---:|---:|
-| `Cmp` | 154 ns | 75 ns |
-| conversion into the same unit | 240 ns | 110 ns |
-| `Add` | 371 ns | 284 ns |
-| `Sub` | 377 ns | 302 ns |
-| the `int64` fast path of reading 2 (prototype) | 105 ns | 45 ns |
-
-The last row is why this belonged in the decision rather than in a later patch:
-without it **the unit check is most of the fast path**, and a fast path built on
-top of it would have been measuring `Unit.Equal` instead of the arithmetic it
-set out to avoid.
-
-**What it does not reach, which is the same boundary reading 2 ran into.** The
-shortcut fires when both operands name the same unit *object*. A unit a `Mul`
-just built is a fresh object with fresh decimals, so an accumulation of computed
-products — `BenchmarkKernel/Exact` — compares two equal-but-distinct units on
-every iteration and pays the cross multiplication anyway. The two findings are
-one finding seen twice: the library recomputes units it already has, and both a
-magnitude fast path and an identity check stop at that.
-
-**Where the rest of the exact core's headroom is.** Of the 480 ns of a `Mul`,
-**229 ns and half the allocations are the unit half** — the exact multiplication
-of two factor fractions (D4), which `BenchmarkCompose/Times` measures on its
-own — against some 50 ns for the magnitude. That fraction is invariant across a
-loop and is rebuilt on every iteration anyway. It is the one place where the
-library recomputes something it already knows, and no fast path for magnitudes
-reaches it.
-
 ---
 
 ## 11. Appendix: verification log
@@ -1344,7 +1505,7 @@ cd go/src && GOROOT_BOOTSTRAP=<go1.24+> ./make.bash
 | Construct | Result |
 |---|---|
 | `func (b Box[E]) Map[R any](f func(E) R) Box[R]` | compiles |
-| `func (u Unit[V, B]) Of[N Numeric](v N) Measurement[V, B]` — D10's generic method on a *generic* type, which O2 needs | compiles and runs |
+| `func (u Unit[V, B]) Of[N Numeric](v N) Measurement[V, B]` — D10's generic method on a *generic* type, which the refused reading of D17 needs | compiles and runs |
 | `type I interface { M[T any](t T) }` | `interface method must have no type parameters` |
 | `map[int]slice` where `type slice[A any] []details[A]` | `cannot use generic type slice[A any] without instantiation` |
 | `var _ = Q[2, -1]{}` | `syntax error: unexpected -, expected ]` |
@@ -1391,10 +1552,10 @@ property, golden and guard tests of D14 — but they keep every runtime-cost cla
 in this document checkable on the reader's own machine, which is the only sense
 in which a quoted nanosecond figure is evidence at all.
 
-### Fast mode: where the time goes (O2)
+### Fast mode: where the time goes (D17)
 
 Same machine. **One multiplication of two magnitudes**, by where the value is
-held — this is the table that decides O2, because it separates changing the
+held — this is the table that decides D17, because it separates changing the
 *operations* from changing the *representation*:
 
 | Magnitude held as | Time | Allocations |
@@ -1425,7 +1586,7 @@ time goes either:
 | prototype: `float64` magnitude and `float64` unit | 94 ns | 1 |
 | prototype: the same, result unit hoisted out of the loop | 9.4 ns | 0 |
 
-**The kernel** — 64 readings multiplied and summed — is tabulated in O2. Its
+**The kernel** — 64 readings multiplied and summed — is tabulated in D17. Its
 first and third rows are `BenchmarkKernel/Exact` and `BenchmarkKernel/Boundary`;
 the middle row is the prototype, which the repository does not carry, because a
 benchmark of a design that was not adopted is a maintenance cost with no reader.

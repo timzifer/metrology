@@ -8,6 +8,8 @@ package silent
 
 import (
 	"github.com/timzifer/metrology"
+	"github.com/timzifer/metrology/activity"
+	"github.com/timzifer/metrology/angle"
 	"github.com/timzifer/metrology/dimension"
 	"github.com/timzifer/metrology/duration"
 	"github.com/timzifer/metrology/frequency"
@@ -15,6 +17,7 @@ import (
 	"github.com/timzifer/metrology/length"
 	"github.com/timzifer/metrology/pressure"
 	"github.com/timzifer/metrology/ratio"
+	"github.com/timzifer/metrology/solidangle"
 	"github.com/timzifer/metrology/symbol"
 	"github.com/timzifer/metrology/temperature"
 )
@@ -185,4 +188,39 @@ func anUntaggedOperandGoesEitherWay() {
 func plainFunctionCalls() {
 	_ = metrology.NewEngine(50)
 	_ = dimension.Product(dimension.L, dimension.T)
+}
+
+// A tag a product dropped is followed only as far as it means something. It
+// conflicts with a different tag on the same dimension (D16) and with nothing
+// else: the becquerel converted onto the other unit of its own quantity is the
+// ordinary case.
+func aDroppedTagAgreesWithItsOwnQuantity() {
+	scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
+	_, _ = scaled.To(activity.Curie)
+	_, _ = scaled.Add(activity.Becquerel.Of(1))
+}
+
+// Where the dimension changed, the tag is gone for good. A becquerel times a
+// metre is a T⁻¹L¹ that names no quantity, and dividing the metre back out
+// does not recover one.
+func aDroppedTagDoesNotSurviveTheDimension() {
+	spread, _ := activity.Becquerel.Of(5).Mul(length.Metre.Of(2))
+	back, _ := spread.Div(length.Metre.Of(2))
+	_, _ = back.Add(frequency.Hertz.Of(50))
+}
+
+// Two tagged operands that both survive the product with tags of their own and
+// disagree leave no single answer, and no answer is the same as none: a plane
+// angle times a solid angle is dimensionless and is neither.
+func aProductOfTwoTagsHasNoProvenance() {
+	product, _ := angle.Radian.Of(1).Mul(solidangle.Steradian.Of(1))
+	_, _ = product.To(angle.Radian)
+	_, _ = product.To(solidangle.Steradian)
+}
+
+// A variable of the program's own is its own business: the resolver never
+// trusted it, so writing to it takes nothing away.
+func assigningAVariableOfOnesOwn() {
+	hand = length.Metre
+	table["m"] = pressure.Bar
 }

@@ -45,6 +45,22 @@ func emitQuantity(module string, q quantity, byID map[string]unitSpec) ([]byte, 
 	fmt.Fprintf(&b, "// dim is the dimension every unit in this package measures.\nvar dim = %s\n\n",
 		q.Dimension.dimensionExpr())
 
+	// The tag is a reserved name of this catalogue (D16), so it is declared
+	// once, here, rather than spelled as a string literal at every call site
+	// that compares against it. The unit definitions below take it from this
+	// same constant: one spelling per package, and nothing to drift.
+	if q.Quantity != "" {
+		fmt.Fprintf(&b, `// Quantity is what every unit in this package measures, where the
+// dimension alone does not say it: %s.
+//
+// It is a reserved name of this catalogue (D6, D16) and the spelling a caller
+// should compare against — a string literal of the same words is a second
+// spelling of one fact, with nothing to keep the two in step.
+const Quantity metrology.Quantity = %q
+
+`, q.Quantity, q.Quantity)
+	}
+
 	for _, u := range q.Units {
 		// Take the resolved spec: the one hanging off the quantity knows which
 		// package it belongs to, the one in the YAML struct does not.
@@ -75,7 +91,8 @@ func emitUnit(b *bytes.Buffer, u unitSpec, q quantity, byID map[string]unitSpec)
 		fmt.Fprintf(b, "Kind: %s,\n", u.kindExpr())
 	}
 	if u.quantityTag() != "" {
-		fmt.Fprintf(b, "Quantity: %q,\n", u.quantityTag())
+		// The constant this package declares, not the same words again (D16).
+		fmt.Fprint(b, "Quantity: Quantity,\n")
 	}
 	fmt.Fprintf(b, "Symbol: %s,\n", symbolExpr)
 	if u.Factor.Num != "" {

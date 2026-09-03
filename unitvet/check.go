@@ -10,6 +10,10 @@ import (
 func (c *checker) check(fn *ssa.Function) {
 	for _, block := range fn.Blocks {
 		for _, instr := range block.Instrs {
+			if store, isStore := instr.(*ssa.Store); isStore {
+				c.checkAssignment(store)
+				continue
+			}
 			call, isCall := instr.(*ssa.Call)
 			if !isCall {
 				continue
@@ -32,9 +36,39 @@ func (c *checker) check(fn *ssa.Function) {
 	}
 }
 
+// checkAssignment reports an assignment to a unit of the generated catalogue.
+//
+// The resolver trusts such a variable by name (D13): pressure.Bar is the bar
+// because the table says the path and the name are, and a write anywhere in the
+// program makes that untrue. The variable is exported and Go lets an importer
+// assign to it, so the assumption is worth one rule rather than a comment — a
+// checker that silently proves the wrong thing is worse than one that proves
+// nothing.
+//
+// Only a direct store is reported. A write through a pointer taken elsewhere is
+// out of reach, and silence on doubt is the governing rule.
+func (c *checker) checkAssignment(store *ssa.Store) {
+	g, isGlobal := store.Addr.(*ssa.Global)
+	if !isGlobal {
+		return
+	}
+	name := g.Pkg.Pkg.Path() + "." + g.Name()
+	if _, found := catalogue[name]; !found {
+		// A variable of the program's own is its own business; the resolver
+		// never trusted it in the first place.
+		return
+	}
+	c.report(store.Pos(), "%s.%s is assigned; the generated table no longer describes it, and every unit resolved through it is unproven",
+		g.Pkg.Pkg.Name(), g.Name())
+}
+
 // checkAdditive reports a sum, a difference or a comparison the run time would
 // refuse, in the order the run time refuses it: the dimension first, because
 // it is the coarser mistake, then the quantity, then the kind.
+//
+// The one rule that outlives the run time sits between the second and the
+// third: a tag a product dropped still conflicts, and the run time has no way
+// left to see it (D16).
 func (c *checker) checkAdditive(call *ssa.Call, op string) {
 	left, right, known := c.operands(call.Common())
 	if !known {
@@ -45,6 +79,8 @@ func (c *checker) checkAdditive(call *ssa.Call, op string) {
 		c.report(call.Pos(), "%s on incompatible dimensions: %s and %s", op, left.dim, right.dim)
 	case !compatible(left.quantity, right.quantity):
 		c.report(call.Pos(), "%s on incompatible quantities: %s and %s", op, left.quantity, right.quantity)
+	case !compatible(effective(left), effective(right)):
+		c.report(call.Pos(), "%s on incompatible quantities: %s and %s; %s", op, describe(left), describe(right), tagWasDropped)
 	default:
 		if why, forbidden := affineRule(op, left.kind, right.kind); forbidden {
 			c.report(call.Pos(), "%s on incompatible kinds: %s and %s; %s", op, left.kind, right.kind, why)
@@ -101,7 +137,23 @@ func (c *checker) checkConversion(call *ssa.Call, op string) {
 			op, from.kind, to.kind)
 	case !compatible(from.quantity, to.quantity):
 		c.report(call.Pos(), "%s on incompatible quantities: %s and %s", op, from.quantity, to.quantity)
+	case !compatible(effective(from), effective(to)):
+		c.report(call.Pos(), "%s on incompatible quantities: %s and %s; %s", op, describe(from), describe(to), tagWasDropped)
 	}
+}
+
+// tagWasDropped closes the one diagnostic that predicts no run-time error. It
+// says so, because a reader who runs the code and sees it pass would otherwise
+// conclude the checker is wrong (D16).
+const tagWasDropped = "Mul and Div drop the tag (D6), so the run time no longer sees the conflict"
+
+// describe names the quantity a scale speaks for, saying where the tag is
+// provenance rather than a claim the value still makes.
+func describe(s scale) string {
+	if s.quantity != "" {
+		return string(s.quantity)
+	}
+	return "a magnitude computed from " + string(s.dropped)
 }
 
 // checkPower reports a power of a point on a scale. It stands apart from the

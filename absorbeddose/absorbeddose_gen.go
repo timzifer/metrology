@@ -16,11 +16,19 @@ import (
 // dim is the dimension every unit in this package measures.
 var dim = dimension.New(dimension.Exponents{Time: -2, Length: 2})
 
+// Quantity is what every unit in this package measures, where the
+// dimension alone does not say it: absorbed dose.
+//
+// It is a reserved name of this catalogue (D6, D16) and the spelling a caller
+// should compare against — a string literal of the same words is a second
+// spelling of one fact, with nothing to keep the two in step.
+const Quantity metrology.Quantity = "absorbed dose"
+
 // Gray is the SI unit of absorbed dose, J·kg⁻¹.
 //
 // Source: SI Brochure 9th ed., §2.3.4 Table 4
 var Gray = metrology.MustUnit(metrology.UnitDef{
 	Dimension: dim,
-	Quantity:  "absorbed dose",
+	Quantity:  Quantity,
 	Symbol:    symbol.SI("Gy"),
 })

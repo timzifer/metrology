@@ -32,6 +32,45 @@
 // same source the library itself is generated from (D8), so the checker and
 // the run time cannot drift apart.
 //
+// # A catalogue unit that is assigned
+//
+// A unit is a package-level variable — pressure.Bar, dose.Sievert — and this
+// pass resolves one by name, from the table generated alongside the catalogue.
+// Go lets an importer assign to an exported variable of another package, and a
+// program that does makes the table untrue: the name still resolves, to a unit
+// the variable no longer holds.
+//
+// The assumption is checked rather than assumed. A direct store to a catalogue
+// unit is reported where it happens:
+//
+//	app/app.go:9:2: dose.Sievert is assigned; the generated table no longer
+//	                describes it, and every unit resolved through it is unproven
+//
+// A write through a pointer taken elsewhere is out of reach, as is one in a
+// dependency the vet run does not cover.
+//
+// # The tag a product dropped
+//
+// One rule reports something the run time accepts, and it is the only one
+// (D16). Multiplication and division drop the quantity tag of D6 — a becquerel
+// times a metre is not anything the catalogue names — so a becquerel scaled by
+// a plain number reaches the next operation as an untagged T⁻¹, and the run
+// time, which no longer holds the tag, lets it meet a frequency:
+//
+//	scaled, _ := activity.Becquerel.Of(5).Mul(ratio.One.Of(2))
+//	_, _ = scaled.Add(frequency.Hertz.Of(50)) // accepted; reported here
+//
+// This pass walks the operands backwards anyway, so it keeps the discarded tag
+// as provenance and reports the conflict the run time can no longer see. The
+// message says as much, because a diagnostic the reader cannot reproduce by
+// running the code is a diagnostic the reader stops believing.
+//
+// The provenance is not a tag. Converting that magnitude into a curie is legal
+// and stays silent; only a conflicting tag is reported. It survives only where
+// the dimension does — a becquerel times a metre carries nothing, and dividing
+// the metre back out recovers nothing — and two surviving tags that disagree
+// leave none.
+//
 // # Silencing a report
 //
 // A test that asserts an operation fails is an operation the pass is right to
@@ -82,10 +121,16 @@ var Analyzer = &analysis.Analyzer{
 // dimension it is on, whether it is a point on a scale or a span along it, and
 // which quantity it claims to be where the dimension carries more than one
 // (D6). It is the generated table's value type.
+//
+// The dropped tag is the checker's own field and never comes out of the table:
+// it is the quantity a product or a quotient discarded while leaving the
+// dimension intact, which is the one thing about a computed magnitude the run
+// time cannot remember and this pass can (D16).
 type scale struct {
 	dim      dimension.Dimension
 	kind     metrology.Kind
 	quantity metrology.Quantity
+	dropped  metrology.Quantity
 }
 
 // String names a scale the way a diagnostic and a fact do.
@@ -93,6 +138,9 @@ func (s scale) String() string {
 	text := s.dim.String() + " " + s.kind.String()
 	if s.quantity != "" {
 		text += " " + string(s.quantity)
+	}
+	if s.dropped != "" {
+		text += " from " + string(s.dropped)
 	}
 	return text
 }
@@ -106,6 +154,7 @@ type resultScale struct {
 	Dimension uint64
 	Kind      uint8
 	Quantity  string
+	Dropped   string
 }
 
 // AFact marks resultScale as a fact of the analysis framework.
@@ -118,6 +167,7 @@ func (f *resultScale) scale() scale {
 		dim:      dimension.Dimension(f.Dimension),
 		kind:     metrology.Kind(f.Kind),
 		quantity: metrology.Quantity(f.Quantity),
+		dropped:  metrology.Quantity(f.Dropped),
 	}
 }
 
@@ -126,6 +176,7 @@ func factOf(s scale) *resultScale {
 		Dimension: uint64(s.dim),
 		Kind:      uint8(s.kind),
 		Quantity:  string(s.quantity),
+		Dropped:   string(s.dropped),
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/timzifer/metrology/force"
 	"github.com/timzifer/metrology/frequency"
 	"github.com/timzifer/metrology/interval"
+	"github.com/timzifer/metrology/kinematicviscosity"
 	"github.com/timzifer/metrology/length"
 	"github.com/timzifer/metrology/luminosity"
 	"github.com/timzifer/metrology/luminousflux"
@@ -100,6 +101,41 @@ func TestQuantitiesSharingADimension(t *testing.T) {
 	}
 	if _, err := q.To(dose.Sievert); err != nil {
 		t.Errorf("an untagged J/kg would not become a sievert: %v", err)
+	}
+}
+
+// Every tag this catalogue reserves is declared as a constant in the package
+// that owns it, and the unit definitions are generated from that same constant
+// (D16). What the test adds is the half a caller depends on: the constant is
+// the tag, so a program never has to spell "kinematic viscosity" itself and a
+// change to the catalogue reaches it as a compile error rather than as a
+// lookup that quietly stops matching.
+func TestQuantityConstants(t *testing.T) {
+	for _, tc := range []struct {
+		unit metrology.Unit
+		tag  metrology.Quantity
+	}{
+		{frequency.Hertz, frequency.Quantity},
+		{activity.Becquerel, activity.Quantity},
+		{absorbeddose.Gray, absorbeddose.Quantity},
+		{dose.Sievert, dose.Quantity},
+		{angle.Radian, angle.Quantity},
+		{solidangle.Steradian, solidangle.Quantity},
+		{luminosity.Candela, luminosity.Quantity},
+		{luminousflux.Lumen, luminousflux.Quantity},
+		{kinematicviscosity.SquareMetrePerSecond, kinematicviscosity.Quantity},
+	} {
+		if got := tc.unit.Quantity(); got != tc.tag {
+			t.Errorf("%s carries the tag %q, its package declares %q", tc.unit, got, tc.tag)
+		}
+		canonical, ok := catalog.Canonical(tc.unit.Dimension(), tc.unit.Kind(), tc.tag)
+		if !ok {
+			t.Errorf("the catalogue has no canonical unit for %q", tc.tag)
+			continue
+		}
+		if !canonical.Equal(tc.unit) {
+			t.Errorf("%q resolves to %s, not to %s", tc.tag, canonical, tc.unit)
+		}
 	}
 }
 

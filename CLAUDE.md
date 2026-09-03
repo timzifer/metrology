@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D15 and referenced
+more importantly, the reasoning — decisions are numbered D1 … D17 and referenced
 from code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
 `CONCEPT.md` and the code is the failure mode to avoid.
@@ -31,7 +31,10 @@ not what D15 describes.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a
-`source:`; the generator rejects one without. One `catgen` run writes the
+`source:`; the generator rejects one without. A group with a `quantity:` also
+gets a generated `const Quantity` in its package — `frequency.Quantity` — and
+the unit definitions are written from that constant, so the tag has one spelling
+per package (D16). Compare against the constant, never against a string literal. One `catgen` run writes the
 quantity packages, `catalog/units_gen.go` **and** `unitvet/table_gen.go`: the
 checker resolves units against the catalogue it was generated from, and that is
 the only reason it cannot drift out of step with the run time.
@@ -86,6 +89,13 @@ reports every way a symbol may be written, and the parser indexes exactly those.
 A static symbol takes no prefix at all — that is what keeps `cd` the candela and
 not a centi-day. Do not replace it with a matcher that strips a leading letter
 and hopes.
+
+**A quantity tag is identity, and its spelling belongs to the catalogue that
+generated it (D16).** `Quantity` stays a `string` so a caller can have tags of
+its own, but this module's tags are declared as constants in the packages that
+own them. Do not reintroduce string literals for them, and do not move the
+constants into `catalog` — that would pull all forty-three quantity packages in
+behind a tag comparison.
 
 **Kind and quantity are separate fields (D6).** `Kind` is absolute versus
 interval. `Quantity` is which quantity a shared dimension is being read as — the
@@ -168,16 +178,30 @@ error branch that cannot fire usually means the error cannot occur.
   `CONCEPT.md` — the benchmark data is there; going higher costs measurably and
   buys nothing for physical measurements. decimal128 is one `NewEngine(34)` away.
 - There is no swappable arithmetic and no float-backed fast mode, and there will
-  not be one: O2 in `CONCEPT.md` measures a facade over the operations as
+  not be one: D17 measures a facade over the operations as
   *slower* than the decimals it replaces, because the representation is where the
   time is, and a loop that leaves its units at the boundary beats every variant
   of it anyway. `BenchmarkKernel` is that comparison; run it before proposing one
-  again. What O2 does *not* refuse is the adaptive fast path — an `int64`
+  again. This one is decided, not open — `Measurement` and `Unit` stay concrete
+  single-arithmetic types, and that is a `v1.0.0` promise. What D17 does *not*
+  refuse is the adaptive fast path — an `int64`
   coefficient in place of a decimal where the value fits one, promoting to apd
   where it does not. That one is measured favourably and stays open, on three
   conditions: an integer and never a float, because the shortcut has to compute
   what the slow path computes; a tagged struct field and never an interface
   member, which allocates per value; and no generics, which it does not need.
+- `unitvet` reports exactly one thing the run time accepts, and it is on
+  purpose (D16): a quantity tag that a `Mul` or a `Div` dropped while leaving
+  the dimension intact still conflicts, and the run time has no tag left to
+  check. The message says so in its own text. The provenance is not a tag — a
+  becquerel scaled by a number still converts into a curie silently — and it
+  dies with the dimension. Do not "fix" this by putting the tag back into
+  `Mul`/`Div`; that is the guessing D6 forbids.
+- A catalogue unit is an exported `var` and an importer can assign to it. That
+  is not an oversight (D7), and `unitvet` reports the write: it resolves such a
+  variable by name, so a store to one is what makes its table untrue. Do not
+  turn the catalogue into accessor functions to close this — D13 records what
+  the write actually costs, and it is not the shape of the API.
 - `unitvet` stays silent on cases it cannot prove (D13). That is the design: a
   dimension checker with false positives gets switched off and then catches
   nothing at all. Do not make it "smarter" by guessing. In particular it trusts
