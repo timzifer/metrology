@@ -144,6 +144,46 @@ Everything the library prints, it reads back — as the same unit, the same kind
 and the same digits, across the whole catalogue. The parser is fuzzed against
 that property.
 
+## A value that is known only within bounds
+
+A measurement from an instrument is not a point, it is a range — and checking a
+published number against a specification means asking whether two ranges
+overlap. `uncertainty.Range` is a unit and two bounds:
+
+```go
+measured, _ := uncertainty.Parse("2.55 ± 0.05 bar")   // [2.50, 2.60] bar; the
+                                                      // bracket and 2.55(5)
+                                                      // forms read too
+specified, _ := uncertainty.Parse("[254, 258] kPa")
+
+agree, _ := measured.Overlaps(specified)              // true
+width, _ := measured.Width()                          // 0.10 bar
+```
+
+The kind rules come for free — both bounds share one scale, so `20 ± 0.5 °C` is
+a range of points, its width is `1 K`, and two ranges of points still have no
+sum. What does not come for free is the rounding. **A bound rounds outward**:
+the lower one toward −∞, the upper one toward +∞. Round a bound the way a point
+is rounded and it moves *into* the interval, and a narrowed interval can turn an
+overlap into a disjoint pair — a disagreement the conversion invented, which is
+the exact failure this library exists to prevent:
+
+```go
+r, _ := uncertainty.Parse("[2.5, 2.6] bar")
+t, _ := r.To(pressure.Torr)   // [1875.154206760424377, 1950.1603750308413521] Torr
+b, _ := t.To(pressure.Bar)    // [2.4999999999999999999, 2.6000000000000000001] bar
+```
+
+The round trip comes back wider than it went in, never narrower, and that
+property is asserted across the whole catalogue.
+
+This is interval arithmetic and not an uncertainty budget. It has the dependency
+problem — `x − x` is not zero, `x / x` is not one, and a formula naming a
+variable twice over-widens. For checking a number that is conservative and safe;
+as a GUM-style uncertainty budget it is wrong, and the package says so on its
+first line. Quadrature combination, correlated quantities and coverage factors
+are deliberately not here.
+
 ## Dimensions are checked before the code runs
 
 Go cannot express dimensional analysis in its type system, so this library
@@ -175,6 +215,14 @@ For the test that asserts an operation fails, a comment silences the report:
 //unitvet:ignore the assertion is that this conversion fails
 _, err := frequency.Hertz.Of(50).To(activity.Becquerel)
 ```
+
+It checks ranges too. The dimension, the kind and the quantity of an
+`uncertainty.Range` are those of its bounds, so every rule above applies to it
+unchanged — adding a range of pressures to a range of temperatures is reported
+where adding the measurements would be. That is not a convenience: the interval
+layer moved a second arithmetic surface out of the core, and a checker that went
+blind exactly where the arithmetic went would be worse than none, because nobody
+would notice.
 
 The table of units the pass resolves against is generated from the same
 `catalog.yaml` as the library, so the checker and the run time cannot drift
@@ -335,16 +383,17 @@ The module is nevertheless tagged `v0.x`, and **the API may change until
 exported surface, not missing functionality: which of the composition methods are
 load-bearing enough to freeze, the naming of the error types D11 makes a
 substitute for a compile error, whether `parse.Text` is the right shape for the
-decoding boundary, and what `Quantity` promises — it is an open `string`, and
-whether that tag is part of a unit's identity or an interpretation of it is
-answered three different ways today. The open points are listed in [section 7 of
+decoding boundary, whether `uncertainty.Range` ships inside `v1.0.0` or behind
+it, and whether the two additions the interval layer needed from the core —
+`Engine.Rounding` and `Unit.OfDecimal` — belong in the frozen surface. The open
+points are listed in [section 7 of
 CONCEPT.md](CONCEPT.md#7-state-and-the-road-to-v100).
 
 ## Documentation
 
 - [pkg.go.dev](https://pkg.go.dev/github.com/timzifer/metrology) — the API, with
   runnable examples for everything a caller touches.
-- [CONCEPT.md](CONCEPT.md) — architecture, the fourteen design decisions and the
+- [CONCEPT.md](CONCEPT.md) — architecture, the nineteen design decisions and the
   reasoning behind them, what is deliberately deferred, and a verification log
   with reproduction steps for every measured claim.
 - [CLAUDE.md](CLAUDE.md) — invariants and conventions for anyone (human or agent)
