@@ -70,7 +70,7 @@ func run(source, root, module string) error {
 		if err != nil {
 			return fmt.Errorf("package %s: %w", q.Package, err)
 		}
-		dir := filepath.Join(root, q.Package)
+		dir := filepath.Join(root, unitsDir, q.Package)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

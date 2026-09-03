@@ -4,11 +4,11 @@
 package ignored
 
 import (
-	"github.com/timzifer/metrology/activity"
-	"github.com/timzifer/metrology/duration"
-	"github.com/timzifer/metrology/frequency"
-	"github.com/timzifer/metrology/length"
-	"github.com/timzifer/metrology/pressure"
+	"github.com/timzifer/metrology/units/activity"
+	"github.com/timzifer/metrology/units/duration"
+	"github.com/timzifer/metrology/units/frequency"
+	"github.com/timzifer/metrology/units/length"
+	"github.com/timzifer/metrology/units/pressure"
 )
 
 func deliberateMistakes() {

@@ -11,12 +11,12 @@ import (
 	"errors"
 
 	"github.com/timzifer/metrology"
-	"github.com/timzifer/metrology/activity"
-	"github.com/timzifer/metrology/frequency"
-	"github.com/timzifer/metrology/length"
-	"github.com/timzifer/metrology/pressure"
-	"github.com/timzifer/metrology/ratio"
-	"github.com/timzifer/metrology/temperature"
+	"github.com/timzifer/metrology/units/activity"
+	"github.com/timzifer/metrology/units/frequency"
+	"github.com/timzifer/metrology/units/length"
+	"github.com/timzifer/metrology/units/pressure"
+	"github.com/timzifer/metrology/units/ratio"
+	"github.com/timzifer/metrology/units/temperature"
 )
 
 // Warmer is Ambient by another name.

@@ -7,16 +7,16 @@ import (
 
 	"github.com/timzifer/metrology"
 	"github.com/timzifer/metrology/dimension"
-	"github.com/timzifer/metrology/duration"
-	"github.com/timzifer/metrology/energy"
-	"github.com/timzifer/metrology/interval"
-	"github.com/timzifer/metrology/length"
-	"github.com/timzifer/metrology/mass"
 	"github.com/timzifer/metrology/parse"
-	"github.com/timzifer/metrology/pressure"
 	"github.com/timzifer/metrology/symbol"
-	"github.com/timzifer/metrology/temperature"
-	"github.com/timzifer/metrology/volume"
+	"github.com/timzifer/metrology/units/duration"
+	"github.com/timzifer/metrology/units/energy"
+	"github.com/timzifer/metrology/units/interval"
+	"github.com/timzifer/metrology/units/length"
+	"github.com/timzifer/metrology/units/mass"
+	"github.com/timzifer/metrology/units/pressure"
+	"github.com/timzifer/metrology/units/temperature"
+	"github.com/timzifer/metrology/units/volume"
 )
 
 // TestMeasurement reads the forms a program actually meets: what the library

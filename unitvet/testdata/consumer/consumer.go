@@ -4,8 +4,8 @@
 package consumer
 
 import (
-	"github.com/timzifer/metrology/activity"
-	"github.com/timzifer/metrology/length"
+	"github.com/timzifer/metrology/units/activity"
+	"github.com/timzifer/metrology/units/length"
 
 	"corpus/facts"
 )

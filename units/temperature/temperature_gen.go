@@ -10,8 +10,8 @@ package temperature
 import (
 	"github.com/timzifer/metrology"
 	"github.com/timzifer/metrology/dimension"
-	"github.com/timzifer/metrology/interval"
 	"github.com/timzifer/metrology/symbol"
+	"github.com/timzifer/metrology/units/interval"
 )
 
 // dim is the dimension every unit in this package measures.

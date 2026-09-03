@@ -314,7 +314,7 @@ quantities:
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, name := range []string{
-		filepath.Join(dir, "length", "length_gen.go"),
+		filepath.Join(dir, "units", "length", "length_gen.go"),
 		filepath.Join(dir, "catalog", "units_gen.go"),
 	} {
 		if _, err := os.Stat(name); err != nil {

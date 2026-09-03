@@ -4,17 +4,17 @@ package provable
 
 import (
 	"github.com/timzifer/metrology"
-	"github.com/timzifer/metrology/activity"
-	"github.com/timzifer/metrology/area"
-	"github.com/timzifer/metrology/dose"
-	"github.com/timzifer/metrology/duration"
-	"github.com/timzifer/metrology/force"
-	"github.com/timzifer/metrology/frequency"
-	"github.com/timzifer/metrology/interval"
-	"github.com/timzifer/metrology/length"
-	"github.com/timzifer/metrology/pressure"
-	"github.com/timzifer/metrology/ratio"
-	"github.com/timzifer/metrology/temperature"
+	"github.com/timzifer/metrology/units/activity"
+	"github.com/timzifer/metrology/units/area"
+	"github.com/timzifer/metrology/units/dose"
+	"github.com/timzifer/metrology/units/duration"
+	"github.com/timzifer/metrology/units/force"
+	"github.com/timzifer/metrology/units/frequency"
+	"github.com/timzifer/metrology/units/interval"
+	"github.com/timzifer/metrology/units/length"
+	"github.com/timzifer/metrology/units/pressure"
+	"github.com/timzifer/metrology/units/ratio"
+	"github.com/timzifer/metrology/units/temperature"
 )
 
 // A pressure and a temperature have nothing in common but the syntax.

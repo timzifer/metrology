@@ -33,7 +33,7 @@ func emitQuantity(module string, q quantity, byID map[string]unitSpec) ([]byte, 
 		}
 		target := byID[u.Interval]
 		if target.quantity.Package != q.Package {
-			imports = append(imports, fmt.Sprintf("%q", module+"/"+target.quantity.Package))
+			imports = append(imports, fmt.Sprintf("%q", target.quantity.importPath(module)))
 		}
 	}
 	imports = unique(imports)
@@ -132,7 +132,7 @@ func emitIndex(module string, c *catalogue) ([]byte, error) {
 	units := c.units()
 	imports := []string{fmt.Sprintf("%q", module)}
 	for _, u := range units {
-		imports = append(imports, fmt.Sprintf("%q", module+"/"+u.quantity.Package))
+		imports = append(imports, fmt.Sprintf("%q", u.quantity.importPath(module)))
 	}
 	fmt.Fprintf(&b, "import (\n%s\n)\n\n", strings.Join(unique(imports), "\n"))
 
@@ -229,7 +229,7 @@ func emitVetTable(module string, c *catalogue) ([]byte, error) {
 	fmt.Fprintln(&b, "// the package-level variable holding it.")
 	fmt.Fprintln(&b, "var catalogue = map[string]scale{")
 	for _, u := range c.units() {
-		fmt.Fprintf(&b, "%q: {dim: %s", module+"/"+u.quantity.Package+"."+u.Go, u.quantity.Dimension.dimensionExpr())
+		fmt.Fprintf(&b, "%q: {dim: %s", u.quantity.importPath(module)+"."+u.Go, u.quantity.Dimension.dimensionExpr())
 		if u.isAbsolute() {
 			fmt.Fprintf(&b, ", kind: %s", u.kindExpr())
 		}
