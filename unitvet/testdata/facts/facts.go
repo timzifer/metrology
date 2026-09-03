@@ -11,6 +11,7 @@ import (
 	"errors"
 
 	"github.com/timzifer/metrology"
+	"github.com/timzifer/metrology/uncertainty"
 	"github.com/timzifer/metrology/units/activity"
 	"github.com/timzifer/metrology/units/frequency"
 	"github.com/timzifer/metrology/units/length"
@@ -63,3 +64,30 @@ func Count() int { return 1 }
 func Fail() error { return errors.New("no") }
 
 func Nothing() {}
+
+// Tolerance is a range, and a function whose range is always on one scale
+// exports that scale exactly as one returning a measurement does: the fact
+// says what is on it, not which of the library's types carried it (D15).
+func Tolerance() uncertainty.Range { // want Tolerance:"returns L⁻¹M¹T⁻² interval"
+	r, _ := uncertainty.Symmetric(pressure.Bar.Of(2.5), pressure.Bar.Of(0.05))
+	return r
+}
+
+// Ambient again, as a range: an absolute scale survives the constructor.
+func AmbientRange() uncertainty.Range { // want AmbientRange:"returns Θ¹ absolute"
+	return uncertainty.Of(Ambient())
+}
+
+// DecayRange carries the provenance a product dropped, across the boundary.
+func DecayRange() uncertainty.Range { // want DecayRange:"returns T⁻¹ interval from radioactivity"
+	scaled, _ := uncertainty.Of(activity.Becquerel.Of(5)).Mul(uncertainty.Of(ratio.One.Of(2)))
+	return scaled
+}
+
+// UndecidedRange is on one of two scales and has none of its own.
+func UndecidedRange(fine bool) uncertainty.Range {
+	if fine {
+		return uncertainty.Of(pressure.Pascal.Of(1000))
+	}
+	return uncertainty.Of(length.Metre.Of(1))
+}

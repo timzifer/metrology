@@ -58,8 +58,8 @@ func (c *checker) resolveValue(v ssa.Value) (scale, bool) {
 
 // resolveCall reports the scale a call returns.
 func (c *checker) resolveCall(call *ssa.CallCommon) (scale, bool) {
-	if name, isCore := c.coreCall(call); isCore {
-		return c.coreResult(name, call)
+	if owner, name, isCore := c.coreCall(call); isCore {
+		return c.coreResult(owner, name, call)
 	}
 	callee := call.StaticCallee()
 	if callee == nil {
@@ -79,7 +79,8 @@ func (c *checker) resolveCall(call *ssa.CallCommon) (scale, bool) {
 	return scale{}, false
 }
 
-// coreCall reports which method of the library's own types a call invokes.
+// coreCall reports which operation of the library a call invokes, and on which
+// of its types.
 //
 // It insists on a genuine method call — a callee whose signature still has its
 // receiver. A method value binds the receiver into a closure and calls the
@@ -87,10 +88,15 @@ func (c *checker) resolveCall(call *ssa.CallCommon) (scale, bool) {
 // reading the operands by position off such a call would read the wrong ones.
 // A receiver bound out of sight is not something this pass can prove anything
 // about anyway.
-func (c *checker) coreCall(call *ssa.CallCommon) (name string, ok bool) {
+//
+// The exception is the three constructors of the interval layer, which are
+// package-level functions and take their operands as ordinary parameters. They
+// are recognised by their package, so a Between of somebody else's stays what
+// it is.
+func (c *checker) coreCall(call *ssa.CallCommon) (owner owned, name string, ok bool) {
 	callee := call.StaticCallee()
 	if callee == nil {
-		return "", false
+		return owned{}, "", false
 	}
 	if origin := callee.Origin(); origin != nil {
 		// buildssa runs with ssa.BuilderMode(0), so an instantiated generic
@@ -101,18 +107,34 @@ func (c *checker) coreCall(call *ssa.CallCommon) (name string, ok bool) {
 	}
 	receiver := callee.Signature.Recv()
 	if receiver == nil {
-		return "", false
+		return c.rangeConstructor(callee)
 	}
 	named, isNamed := types.Unalias(receiver.Type()).(*types.Named)
 	if !isNamed {
-		// A pointer receiver. The library's own API has none: a Measurement
-		// and a Unit are values (D1).
-		return "", false
+		// A pointer receiver. The library's own API has none: a Measurement,
+		// a Unit and a Range are values (D1).
+		return owned{}, "", false
 	}
-	if _, isCore := c.core[named.Obj()]; !isCore {
-		return "", false
+	found, isCore := c.core[named.Obj()]
+	if !isCore {
+		return owned{}, "", false
 	}
-	return callee.Name(), true
+	return found, callee.Name(), true
+}
+
+// rangeConstructor reports whether a receiverless call is one of the interval
+// layer's constructors.
+//
+// The pass reaches the package by name here rather than by type identity,
+// because a function has no receiver to take a type off. That is sound for the
+// same reason the type map is: within one pass there is one package per import
+// path, and the path is the one this pass was written against.
+func (c *checker) rangeConstructor(callee *ssa.Function) (owned, string, bool) {
+	pkg := callee.Pkg
+	if pkg == nil || pkg.Pkg.Path() != rangePath || !rangeConstructors[callee.Name()] {
+		return owned{}, "", false
+	}
+	return owned{owner: rangePath, name: "Range"}, callee.Name(), true
 }
 
 // coreResult reports the scale a call to one of the library's own methods
@@ -124,11 +146,28 @@ func (c *checker) coreCall(call *ssa.CallCommon) (name string, ok bool) {
 // takes both explicitly. The method set and this table are generated and
 // written together with the API they describe; a change to one is a change to
 // the other.
-func (c *checker) coreResult(name string, call *ssa.CallCommon) (scale, bool) {
+func (c *checker) coreResult(owner owned, name string, call *ssa.CallCommon) (scale, bool) {
 	switch name {
 	case "Of", "OfString":
-		// A magnitude is read on the unit it is put on.
+		// A magnitude is read on the unit it is put on, and a range around a
+		// magnitude is read on the same scale as the magnitude. Either way the
+		// answer is the first argument — the unit for Unit.Of, the measurement
+		// for uncertainty.Of.
 		return c.resolve(call.Args[0])
+
+	case "Lo", "Hi", "Mid":
+		// A bound of a range, and its midpoint, are on the range's own scale.
+		return c.resolve(last(call))
+
+	case "Between", "Symmetric":
+		return c.ranged(name, call)
+
+	case "Width":
+		// A width is a span, and for an absolute range it is read on the
+		// interval unit the scale declares — which unit that is, is not
+		// something this table records. Same reason as the difference of two
+		// points in combined, and the same answer: there is none.
+		return c.spanOf(call)
 
 	case "To":
 		// A conversion lands on its target, whether or not it is legal; an
@@ -136,8 +175,13 @@ func (c *checker) coreResult(name string, call *ssa.CallCommon) (scale, bool) {
 		// the conversion itself already reports.
 		return c.resolve(last(call))
 
-	case "Times", "Per", "Pow":
+	case "Times", "Per":
 		return c.composed(name, call)
+
+	case "Pow":
+		// A range has no Times and no Per, and its Pow is the unit's: one
+		// operand, the same refusal of an absolute scale, the same dimension.
+		return c.powered(call)
 
 	case "Add", "Sub":
 		return c.combined(name, call)
@@ -148,32 +192,27 @@ func (c *checker) coreResult(name string, call *ssa.CallCommon) (scale, bool) {
 	return scale{}, false
 }
 
-// composed reports the scale of a unit built out of other units.
+// spanOf reports the scale of the width of a range: the range's own where it is
+// already a span, and nothing where it is a point, because the unit a
+// difference of two points is read on is declared by the scale and not recorded
+// in the table.
+func (c *checker) spanOf(call *ssa.CallCommon) (scale, bool) {
+	s, known := c.resolve(call.Args[0])
+	if !known || s.kind == metrology.Absolute {
+		return scale{}, false
+	}
+	return s, true
+}
+
+// composed reports the scale of a unit built out of two other units.
 //
 // Both drop the kind and the quantity, exactly as the arithmetic of D6 does:
 // a product of a force and a length is not a torque until someone says so.
 func (c *checker) composed(name string, call *ssa.CallCommon) (scale, bool) {
-	left, known := c.resolve(call.Args[0])
-	if !known || left.kind == metrology.Absolute {
-		// A point on a scale has no product and no power; the operation
-		// returns an error and the zero Unit.
-		return scale{}, false
-	}
-	if name == "Pow" {
-		exponent, isConst := call.Args[1].(*ssa.Const)
-		if !isConst {
-			return scale{}, false
-		}
-		n := exponent.Int64()
-		if n < -metrology.MaxPower || n > metrology.MaxPower {
-			return scale{}, false
-		}
-		dim := left.dim.Pow(dimension.Exponent(n))
-		return scale{dim: dim, dropped: dropTag(dim, left, scale{})}, true
-	}
-
-	right, known := c.resolve(call.Args[1])
-	if !known || right.kind == metrology.Absolute {
+	left, right, known := c.operands(call)
+	if !known || left.kind == metrology.Absolute || right.kind == metrology.Absolute {
+		// A point on a scale has no product; the operation returns an error
+		// and the zero Unit.
 		return scale{}, false
 	}
 	if name == "Times" {
@@ -182,6 +221,54 @@ func (c *checker) composed(name string, call *ssa.CallCommon) (scale, bool) {
 	}
 	dim := dimension.Quotient(left.dim, right.dim)
 	return scale{dim: dim, dropped: dropTag(dim, left, right)}, true
+}
+
+// powered reports the scale of a unit or a range raised to a power.
+//
+// A power that is not a constant is a power this pass cannot compute, and one
+// beyond the range of a dimension exponent (D5) is an error rather than a
+// scale. Both are silence.
+func (c *checker) powered(call *ssa.CallCommon) (scale, bool) {
+	base, known := c.resolve(raised(call))
+	if !known || base.kind == metrology.Absolute {
+		return scale{}, false
+	}
+	exponent, isConst := last(call).(*ssa.Const)
+	if !isConst {
+		return scale{}, false
+	}
+	n := exponent.Int64()
+	if n < -metrology.MaxPower || n > metrology.MaxPower {
+		return scale{}, false
+	}
+	dim := base.dim.Pow(dimension.Exponent(n))
+	return scale{dim: dim, dropped: dropTag(dim, base, scale{})}, true
+}
+
+// ranged reports the scale a range is built on: the first operand's, since both
+// bounds share one scale and the constructors refuse anything else.
+//
+// Where the two operands disagree there is no range at all, and the diagnostic
+// for the constructor itself is what reports it — saying nothing here keeps one
+// mistake from being reported as several.
+func (c *checker) ranged(name string, call *ssa.CallCommon) (scale, bool) {
+	left, right, known := c.operands(call)
+	if !known || left.dim != right.dim || !compatible(left.quantity, right.quantity) {
+		return scale{}, false
+	}
+	if _, forbidden := affineRule(name, left.kind, right.kind); forbidden {
+		return scale{}, false
+	}
+	quantity := left.quantity
+	if quantity == "" {
+		quantity = right.quantity
+	}
+	return scale{
+		dim:      left.dim,
+		kind:     left.kind,
+		quantity: quantity,
+		dropped:  dropTag(left.dim, left, right),
+	}, true
 }
 
 // combined reports the scale of a sum or a difference.
@@ -250,8 +337,14 @@ func (c *checker) operands(call *ssa.CallCommon) (left, right scale, known bool)
 	return left, right, leftKnown && rightKnown
 }
 
-// last is the final argument of a call: the target of a conversion.
+// last is the final argument of a call: the target of a conversion, the
+// exponent of a power, or the single operand of a method that takes none.
 func last(call *ssa.CallCommon) ssa.Value { return call.Args[len(call.Args)-1] }
+
+// raised is the value a power is taken of: the second-to-last argument, which
+// is the receiver for Unit.Pow and Range.Pow and the explicit operand for the
+// same method on an Engine.
+func raised(call *ssa.CallCommon) ssa.Value { return call.Args[len(call.Args)-2] }
 
 // compatible mirrors the run-time rule of D6: two tags must agree, and an
 // untagged operand goes either way.

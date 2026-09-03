@@ -325,3 +325,41 @@ func TestZeroPrintsAsOneZero(t *testing.T) {
 		}
 	}
 }
+
+// OfDecimal is the exported counterpart of Decimal: the digits go in and come
+// back out, with no float64 and no text on either leg.
+func TestOfDecimal(t *testing.T) {
+	digits := "2.500000000000000000000000000001"
+	d, _, err := apd.NewFromString(digits)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := Bar.OfDecimal(d).String(); got != digits+" bar" {
+		t.Errorf("got %s, want %s bar", got, digits)
+	}
+
+	// The canonicalisation Of and OfString apply reaches here too: a zero with
+	// a positive exponent has one spelling (D12).
+	if got := Bar.OfDecimal(apd.New(0, 3)).String(); got != "0 bar" {
+		t.Errorf("got %s, want 0 bar", got)
+	}
+}
+
+// D3 at the new door. OfDecimal takes a copy, so the caller may go on writing
+// to the decimal it passed in, and 200 digits is what makes the check real:
+// apd/v3 stores coefficients up to 38 digits inline and hides the aliasing
+// below that.
+func TestOfDecimalDoesNotAliasItsArgument(t *testing.T) {
+	d, _, err := apd.NewFromString(strings.Repeat("1234567890", 20))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m := Metre.OfDecimal(d)
+	before := m.String()
+
+	d.Coeff.SetInt64(1)
+	d.Exponent = 0
+	if m.String() != before {
+		t.Fatalf("the measurement follows its argument: %s became %s", before, m)
+	}
+}

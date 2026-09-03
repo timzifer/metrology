@@ -18,12 +18,12 @@ func (c *checker) check(fn *ssa.Function) {
 			if !isCall {
 				continue
 			}
-			name, isCore := c.coreCall(call.Common())
+			_, name, isCore := c.coreCall(call.Common())
 			if !isCore {
 				continue
 			}
 			switch name {
-			case "Add", "Sub", "Cmp":
+			case "Add", "Sub", "Cmp", "Overlaps", "Between", "Symmetric":
 				c.checkAdditive(call, name)
 			case "Mul", "Div", "Times", "Per":
 				c.checkScaling(call, name)
@@ -100,7 +100,13 @@ func affineRule(op string, left, right metrology.Kind) (why string, forbidden bo
 		if left == metrology.Interval && right == metrology.Absolute {
 			return "a point on a scale cannot be subtracted from a span along it", true
 		}
-	default: // Cmp
+	case "Symmetric":
+		// A tolerance is a distance along a scale: m − tol and m + tol have to
+		// be meaningful, and with an absolute tolerance the second is not.
+		if right == metrology.Absolute {
+			return "a tolerance is a span along a scale, not a point on it", true
+		}
+	default: // Cmp, Overlaps, Between — two magnitudes read the same way
 		if left != right {
 			return "a point on a scale and a span along it are not comparable", true
 		}
@@ -160,7 +166,7 @@ func describe(s scale) string {
 // other rules because it has one operand: the square of 20 °C is not 400 of
 // anything.
 func (c *checker) checkPower(call *ssa.Call) {
-	unit, known := c.resolve(call.Common().Args[0])
+	unit, known := c.resolve(raised(call.Common()))
 	if !known {
 		return
 	}

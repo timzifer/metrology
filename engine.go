@@ -22,12 +22,37 @@ const DefaultPrecision = 20
 //	sum, err := e.Add(a, b)
 type Engine struct {
 	precision uint32
+
+	// rounding is the mode the one inexact operation of a computation uses.
+	// The empty Rounder is apd's own default and the policy of D9; only the
+	// interval layer of D15 asks for another one.
+	rounding apd.Rounder
 }
 
 // NewEngine returns an Engine computing with the given number of significant
 // digits. A precision of zero selects [DefaultPrecision].
 func NewEngine(precision uint32) Engine {
 	return Engine{precision: precision}
+}
+
+// Rounding returns an Engine that rounds the way mode says, at the same
+// precision.
+//
+// D9 gives this library one rounding policy, and for a point it is the right
+// one. For the bound of an interval it is wrong: rounding a bound inward
+// narrows the interval, and a narrowed interval can turn an overlap into a
+// disjoint pair — a disagreement manufactured by the conversion and standing in
+// no source. So the Range of the uncertainty package converts its lower bound
+// with [apd.RoundFloor] and its upper one with [apd.RoundCeiling], and this
+// method is the only reason it can (D15).
+//
+// The zero Engine is unchanged: a second rounding policy in a library that had
+// exactly one, invisible unless asked for.
+//
+//	lo := metrology.Engine{}.Rounding(apd.RoundFloor)
+func (e Engine) Rounding(mode apd.Rounder) Engine {
+	e.rounding = mode
+	return e
 }
 
 // Precision reports the number of significant digits this Engine keeps.
@@ -39,9 +64,14 @@ func (e Engine) Precision() uint32 {
 }
 
 // context returns the rounding context for inexact operations.
+//
+// This is the one place a rounding mode reaches the arithmetic: the single
+// division of a conversion (D4) and the products and quotients of D9 all round
+// here and nowhere else, so [Engine.Rounding] needs no second implementation.
 func (e Engine) context() apd.Context {
 	ctx := apd.BaseContext
 	ctx.Precision = e.Precision()
+	ctx.Rounding = e.rounding
 	return ctx
 }
 

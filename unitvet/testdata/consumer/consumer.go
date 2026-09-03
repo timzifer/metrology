@@ -29,3 +29,12 @@ func withoutAFact() {
 	_, _ = facts.FromAParameter(length.Metre).Add(facts.Inlet())
 	_, _ = facts.Panics().Add(facts.Inlet())
 }
+
+// A range crosses a package boundary on the same fact a measurement does, and
+// the rules on the far side are the ones this package already applies.
+func rangesAcrossAPackageBoundary() {
+	_, _ = facts.Tolerance().Add(facts.AmbientRange())    // want `Add on incompatible dimensions: L⁻¹M¹T⁻² and Θ¹`
+	_, _ = facts.AmbientRange().Add(facts.AmbientRange()) // want `Add on incompatible kinds: absolute and absolute; the sum of two points on a scale is not a point on it`
+	_, _ = facts.DecayRange().To(activity.Becquerel)
+	_, _ = facts.UndecidedRange(true).Add(facts.Tolerance())
+}

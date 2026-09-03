@@ -58,6 +58,20 @@ func (u Unit) OfString(s string) (Measurement, error) {
 	return u.measurement(d), nil
 }
 
+// OfDecimal returns a measurement of d in this unit, exactly.
+//
+// This is the exported counterpart of [Measurement.Decimal]: what that hands
+// out, this takes back, with no float64 and no text in between. The decimal is
+// copied on the way in (D3), so the caller keeps no reach into the result and
+// may go on writing to its own.
+//
+// It exists for the layer that computes with bare magnitudes and has to label
+// them again — the interval type of D15 holds one unit and two decimals, and
+// every bound it hands out passes through here.
+func (u Unit) OfDecimal(d *apd.Decimal) Measurement {
+	return u.measurement(d)
+}
+
 // measurement pairs a decimal with this unit, taking a copy of the decimal so
 // that the caller cannot reach into the result (D3).
 func (u Unit) measurement(d *apd.Decimal) Measurement {

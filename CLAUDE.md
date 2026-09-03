@@ -17,23 +17,24 @@ catalogue holds 82 units across 43 quantity packages, plus 14 customary units in
 `units/customary` (D19) — all seven SI base units,
 all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
-and writes (`metrology` writes, `parse` reads), and `unitvet` checks dimensions
-statically per D13. What remains before `v1.0.0` is the deliberate API review of
+and writes (`metrology` writes, `parse` reads), `uncertainty` carries bounds
+instead of a point (D15), and `unitvet` checks dimensions statically per D13
+over both. What remains before `v1.0.0` is the deliberate API review of
 section 7 of `CONCEPT.md`; until then the module is `v0.x` and the API may
 change. Section 7 also records what is complete and what each subsystem is
 measured by.
 
-One thing is **decided and not built**: `metrology/uncertainty`, the interval
-layer of D15 — a magnitude known only to lie between two bounds. Read D15 before
-touching it, in particular the rule that an interval bound rounds *outward* and
-the additive `Engine.Rounding` that requires. Uncertainty *propagation* —
-quadrature, correlations, coverage factors — stays deferred in section 8 and is
-not what D15 describes.
+`metrology/uncertainty` is the interval layer of D15 — `Range`, a magnitude
+known only to lie between two bounds. Read D15 before touching it. Uncertainty
+*propagation* — quadrature, correlations, coverage factors — stays deferred in
+section 8 and is not what this is: it is interval arithmetic, it has the
+dependency problem, and the package doc says so on its first line because a
+reader who takes it for a GUM implementation gets numbers that look right.
 
 The generated quantity packages live under `units/` (D18) —
-`units/pressure`, `units/temperature`. The seven hand-written packages stay at
+`units/pressure`, `units/temperature`. The eight hand-written packages stay at
 the module root. A new quantity package goes under `units/` because that is
-where `catgen` writes it; nothing chooses the directory by hand. One package to come is a
+where `catgen` writes it; nothing chooses the directory by hand. One package is a
 provenance and not a quantity — `units/customary` (D19), several dimensions in
 one package — and it is the only one the one-dimension rule does not apply to.
 
@@ -120,6 +121,23 @@ its own, but this module's tags are declared as constants in the packages that
 own them. Do not reintroduce string literals for them, and do not move the
 constants into `catalog` — that would pull all forty-three quantity packages in
 behind a tag comparison.
+
+**An interval bound rounds outward, always (D15).** `Lo` is computed with
+`apd.RoundFloor` and `Hi` with `apd.RoundCeiling`, through the additive
+`Engine.Rounding` that exists for no other reason. A bound rounded the way D9
+rounds a point moves *into* the interval, and a narrowed interval can turn an
+overlap into a disjoint pair — a disagreement the conversion invented, which is
+the one failure this library exists to prevent. The property is asserted over
+the whole catalogue in `uncertainty/rounding_test.go`; do not "simplify" the
+two engines into one.
+
+**A `Range` holds one unit and two decimals, never two measurements (D15).** A
+range whose ends are in different units is a state the type must not be able to
+hold. That is also what makes the inheritance from D6 exact — both bounds share
+one unit, so `Width` is a span because absolute − absolute = interval is already
+the rule, and no clause of the interval layer restates a kind rule. If you find
+yourself writing one, the operation is not delegating to the core and it should
+be.
 
 **Kind and quantity are separate fields (D6).** `Kind` is absolute versus
 interval. `Quantity` is which quantity a shared dimension is being read as — the
@@ -226,11 +244,30 @@ error branch that cannot fire usually means the error cannot occur.
   variable by name, so a store to one is what makes its table untrue. Do not
   turn the catalogue into accessor functions to close this — D13 records what
   the write actually costs, and it is not the shape of the API.
+- `unitvet` resolves `uncertainty.Of`, `Between` and `Symmetric` although they
+  are package-level functions with no receiver, which every other rule in the
+  pass requires one of. Without them no range resolves at all and the checker
+  goes silent on the whole layer — which D15 calls the one thing it must not be.
+  It also stays silent on which interval unit the width of an absolute range is
+  read on: the scale declares it, the generated table does not record it, and
+  that is the silence a difference of two points already gets.
 - `unitvet` stays silent on cases it cannot prove (D13). That is the design: a
   dimension checker with false positives gets switched off and then catches
   nothing at all. Do not make it "smarter" by guessing. In particular it trusts
   a package-level unit variable only where the generated table names it, and it
   does not resolve `MustUnit` calls, phi nodes, parameters or container reads.
+- `Range.Pow` raises a magnitude by repeated multiplication, rounding n−1 times
+  where one power would round once. That is not sloppiness: the core has
+  `Unit.Pow` and no `Measurement.Pow`, and every one of those roundings goes
+  outward, so the result is a wider enclosure and still an enclosure. `Range.Mid`
+  computes on the two magnitudes inside the one scale rather than as
+  `(Lo + Hi) / 2`, because the sum of two absolute magnitudes is not a magnitude
+  (D6) and an affine map preserves midpoints anyway. Both are D15.
+- `uncertainty` puts a bare magnitude on a private dimensionless unit to run it
+  through the core's arithmetic. That is not a hack around the API, it is the
+  alternative to building an `apd.Context` of its own — which would be a second
+  rounding policy beside D9 and a second implementation of D4's path, and D15
+  refuses both in as many words.
 - A test in this repository that asserts an operation fails is an operation
   `unitvet` is right to report. Mark it `//unitvet:ignore <reason>` — do not
   weaken the test to hide it from the checker, and do not add a rule exempting

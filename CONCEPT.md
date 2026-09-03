@@ -87,10 +87,11 @@ again:
   terminology.
 
 The one honest cost: metrology as a field also covers calibration, traceability
-and uncertainty, and uncertainty is deferred (section 8). The name promises
-slightly more than v1 delivers. `metrology/uncertainty` was named here as the
-natural home when that changes; D15 makes it the decided one, for the interval
-half of the topic, and section 8 says which half stays deferred.
+and uncertainty, and uncertainty propagation is deferred (section 8). The name
+promises slightly more than v1 delivers. `metrology/uncertainty` was named here
+as the natural home when that changes; D15 made it the decided one for the
+interval half of the topic and it is now built, and section 8 says which half
+stays deferred.
 
 No `go-` prefix: that convention marks a Go binding to something else
 (`go-redis`, `go-sql-driver`), and the last path element becomes the default
@@ -426,6 +427,14 @@ this decision says the rounding belongs.
 the full context precision with zeros: `2.5 bar` otherwise becomes
 `250000.0000000000000000000000000000 Pa`. Numerically correct, unusable as the
 exchange format of D12.
+
+**The rounding mode is `apd`'s default, and there is now a second.** The context
+is `apd.BaseContext` with the precision set, which leaves `Rounding` empty, and
+an empty `apd.Rounder` means `RoundHalfUp`. That is the policy for a point and
+this decision does not change it. `Engine.Rounding` (D15) returns an engine that
+rounds another way, because an interval bound must round outward or the
+conversion narrows the interval — the zero `Engine` is untouched, and a caller
+who never asks never meets it.
 
 **Error handling.** An inexact result is normal and not an error. Overflow,
 division by zero and context violations are errors.
@@ -822,7 +831,16 @@ because "which function dropped" is the only useful form of a coverage failure.
 
 ### D15 — Uncertainty as a layer: `metrology/uncertainty`
 
-**Status:** decided; the package is not built yet.
+**Status:** built. `Range`, its arithmetic, its text form, its parser and the
+`unitvet` receiver all exist, and section 7 records what each is measured by.
+
+Five things this decision said turned out to be wrong when it met the code. They
+are corrected in place below and marked **Correction**, rather than quietly
+edited away, because a decision that reads as if it had been right all along
+teaches nobody what the writing of it missed: `Mid` and `Width` are not total,
+the argument given for why `±` cannot be canonical does not hold (a better one
+does), the `apd` rounding type is named `apd.Rounder`, D9 rounds half-*up* and
+not half-even, and the layer needed two additions to the core and not one.
 
 Section 8 has deferred measurement uncertainty from the beginning, with a
 justification that still holds: it is a large topic of its own with its own
@@ -865,13 +883,47 @@ func Symmetric(m, tol metrology.Measurement) (Range, error)  // 3.7 ± 0.2
 
 func (r Range) Lo() metrology.Measurement
 func (r Range) Hi() metrology.Measurement
-func (r Range) Mid() metrology.Measurement
-func (r Range) Width() metrology.Measurement                 // an interval-kind measurement
+func (r Range) Mid() (metrology.Measurement, error)
+func (r Range) Width() (metrology.Measurement, error)        // an interval-kind measurement
 func (r Range) Overlaps(o Range) (bool, error)
 func (r Range) To(u metrology.Unit) (Range, error)
 func (r Range) Add(o Range) (Range, error)                   // Sub, Mul, Div, Pow
-func (r Range) MarshalText() ([]byte, error)
+func (r Range) String() string                               // "[3.65, 3.75] mm"
+func (r Range) PlusMinus() (string, bool)                    // "3.7 ± 0.05 mm"
+func (r Range) MarshalText() ([]byte, error)                 // MarshalJSON, Value
+
+type Engine struct{ /* core metrology.Engine */ }            // D9, not the mode
+type Parser struct{ /* units parse.Parser */ }               // D7/D12
+type Text struct{ Range; /* … */ }                           // the decoding side
+
+func Parse(text string) (Range, error)                       // Default().Range
 ```
+
+**Correction, `Mid` and `Width` return an error.** Both were sketched above as
+total, and neither is. `Width` is `Hi − Lo`, which for a scale whose declared
+interval unit carries a conflicting quantity tag is refused by D6 — the
+catalogue has no such scale, a caller's catalogue may. `Mid` divides, and a
+division at the edge of the exponent range overflows. Both errors are reachable
+and therefore tested; a branch nobody can reach would have been deleted instead
+(D14).
+
+**How `Mid` is computed, and why it is not `(Lo + Hi) / 2`.** The sum of two
+absolute magnitudes is not a magnitude (D6), so an absolute range has no
+midpoint by that route — and it plainly has one. The midpoint is therefore taken
+on the two magnitudes *inside* the one scale they share: an affine map preserves
+midpoints, so the midpoint of the scale's own coordinates is the midpoint of the
+quantity. It is a point and not a bound, so it rounds the way D9 rounds every
+other point.
+
+**`Pow`, and the power the core does not have.** The core has `Unit.Pow` and no
+`Measurement.Pow`: a magnitude has never needed raising. `Range.Pow` does, so it
+raises by repeated multiplication under the directed engine and takes its unit
+from `Unit.Pow`, which is exact — `(v·f)ⁿ = vⁿ·fⁿ`, so the magnitude alone is
+raised. That rounds n−1 times where a single power would round once. It is
+sound, because every one of those roundings goes outward and a wider enclosure
+is still an enclosure; the godoc says so rather than leaving a reader to
+discover it. An even power of an interval straddling zero is the case worth
+naming: `[−2, 3]²` is `[0, 9]`, and its minimum is at neither bound.
 
 One unit and two magnitudes rather than two measurements, because a range whose
 ends are in different units is a state the type must not be able to hold — and
@@ -885,37 +937,92 @@ because it makes the inheritance from D6 exact.
 | D4, exact fractions | Conversion is the same `(v + offset) · num / den` on each bound — with one amendment, below. |
 | D6, kind and quantity | Free, and pleasingly so. Both bounds share one unit, so an absolute range such as 20 ± 0.5 °C is meaningful; `Width` returns an **interval**-kind measurement because absolute − absolute = interval is already the rule; and multiplying two absolute ranges is already an error. D6 needs no new clause. |
 | D7, no global state | Value types and functions. Reading text needs a symbol table, so a range parser is a value built over a `parse.Parser`, and the asymmetry of D12 repeats verbatim. |
-| D9, precision | The significant-digit rule stays *outside* the type. Deriving `[3.65, 3.75]` from the literal `3.7` is a reading rule and lives in the parser, not in `Range`. D9 does not start tracking significant figures. |
+| D9, precision | The significant-digit rule stays *outside* the type. Deriving `[3.65, 3.75]` from the literal `3.7` is a reading rule and lives in the parser, not in `Range`. D9 does not start tracking significant figures. Precision itself is where D9 puts it: `uncertainty.Engine` is the counterpart of `metrology.Engine` and carries it. What it does not carry is the rounding mode, which is not the caller's to choose here. |
 | D14, coverage | Pure computation, no I/O, no clock. The 100 % rule holds with no exception. |
 
-**The text form, and why `±` cannot be the canonical one.** Every product and
-quotient of two ranges is asymmetric, and neither `3.7 ± 0.2` nor `3.7(2)` can
-write an asymmetric interval. The canonical form is therefore the bracket form,
-`[3.65, 3.75] cm²/s`, which reads back as exactly what it says; `±` and the
-compact parenthesis form are **accepted on input** and produced by a display
-method where the range happens to be symmetric. That is the split D12 already
-makes between `String` and `Prefixed`, for the same reason: the canonical text
-has to read back as the same value, and the pleasant form is a rendering choice.
+**The text form, and why `±` cannot be the canonical one.** The canonical form
+is the bracket form, `[3.65, 3.75] mm²/s`, which states the two magnitudes the
+range holds and reads back as exactly what it says. `±` and the compact
+parenthesis form are **accepted on input** and `Range.PlusMinus` produces the
+first of them. That is the split D12 already makes between `String` and
+`Prefixed`, for the same reason: the canonical text has to read back as the same
+value, and the pleasant form is a rendering choice.
+
+**Correction, the reason `±` is not canonical.** This decision first said that a
+product of two ranges is asymmetric and that `±` cannot write an asymmetric
+interval. That is not true and the code proved it: every closed interval has a
+midpoint and a half-width, so every range has a ± form. Two reasons survive, and
+they are the ones the code implements.
+
+The first is what the form *says*. `[1, 4] m` written as `2.5 ± 1.5 m` asserts a
+centre, and a range that came out of a quotient has no centre anybody claimed —
+the arithmetic produced two bounds, and reading a centre into them is a claim
+about the data that the data does not make. The brackets state what is there.
+
+The second is arithmetic and is what `PlusMinus` reports on. The midpoint and
+the half-width need one digit more than the bounds do, so a range whose bounds
+already fill the engine's precision has no ± form that reads back as the same
+range. `PlusMinus` returns `(string, bool)` and the second result is false
+there, rather than the first result rounding — and it checks by reconstruction,
+putting `mid − tol` and `mid + tol` back against the bounds, because addition
+never rounds and so a mismatch can only have come from the one division.
+
+**The tolerance beside a point is a span.** `20 ± 0.5 °C` reads its tolerance on
+the interval unit the scale declares — 0.5 K — because a tolerance is a distance
+along a scale and never a place on it, which is D6 and not a rule of this layer.
+A scale declaring no interval unit has nowhere to read one, and the kind rules
+say so when the range is built.
 
 **The finding that makes this more than a wrapper: interval conversion must
-round outward.** D9 rounds half-even to the context precision at the one
-division of a conversion. For a point that is right. For an interval *bound* it
-is wrong: rounding a bound inward narrows the interval, and a narrowed interval
-can turn an overlap into a disjoint pair — a disagreement manufactured by the
-conversion and standing in no source. So `Lo` rounds toward −∞ and `Hi` toward
-+∞. `apd` has both modes; what this module does not expose today is a way to ask
-an engine for one, so D15 requires one additive change to the core:
+round outward.** D9 rounds to the context precision at the one division of a
+conversion. For a point that is right. For an interval *bound* it is wrong:
+rounding a bound inward narrows the interval, and a narrowed interval can turn
+an overlap into a disjoint pair — a disagreement manufactured by the conversion
+and standing in no source. So `Lo` rounds toward −∞ and `Hi` toward +∞. `apd`
+has both modes; what this module did not expose was a way to ask an engine for
+one:
 
 ```go
-func (e Engine) Rounding(mode apd.Rounding) Engine
+func (e Engine) Rounding(mode apd.Rounder) Engine
 ```
 
 The zero `Engine` is unchanged and D9 is intact — this is a second rounding
 policy in a library that had exactly one, invisible unless asked for. The
-arithmetic tests gain the assertion that directed rounding never narrows a
-range. The alternative, `uncertainty` building an `apd.Context` of its own and
-duplicating D4's conversion path, is worse for the reason at the top of this
-decision.
+alternative, `uncertainty` building an `apd.Context` of its own and duplicating
+D4's conversion path, is worse for the reason at the top of this decision.
+
+**Correction, the type is `apd.Rounder`.** This decision wrote `apd.Rounding`,
+which is the name of the *field* on `apd.Context`. The type is `apd.Rounder`, a
+string, with `apd.RoundFloor` and `apd.RoundCeiling` among its constants.
+
+**Correction, D9 rounds half-*up*, not half-even.** This decision asserted
+half-even in passing. `Engine.context` is `apd.BaseContext` with the precision
+set, `apd.BaseContext` leaves `Rounding` empty, and an empty `apd.Rounder` means
+`RoundHalfUp`. D9 itself names no mode and is unaffected; the sentence here was
+simply wrong, and it mattered enough to check because the whole finding above is
+about which way a bound moves.
+
+**Correction, two additive changes to the core and not one.** The second is:
+
+```go
+func (u Unit) OfDecimal(d *apd.Decimal) Measurement
+```
+
+`Range` holds a unit and two bare `apd.Decimal`, as the type above says it
+does — and the core had no exported way back from a magnitude to a measurement.
+`Unit.Of` goes through `float64` or `int64` and loses digits; `Unit.OfString` is
+exact but runs every bound through text and back, on every `Lo`, every `Hi` and
+every result of every operation. `OfDecimal` is the exported counterpart of the
+existing `Measurement.Decimal`: what one hands out, the other takes back, and it
+copies on the way in exactly as `Decimal` copies on the way out (D3). It is one
+line, it is additive, and the asymmetry it closes was one before D15 existed.
+Section 7's freeze list gains it.
+
+**The property this rests on is a test, not an argument.** `uncertainty` asserts
+over the whole catalogue that converting a range into every other unit of its
+dimension and back yields a range that *contains* the original, and separately
+that a conversion never pulls two overlapping ranges apart. Directed rounding
+that had been got backwards would fail both within a second.
 
 **`unitvet` learns the second receiver type (D13).** A range added to a range of
 another dimension is exactly the provable class the checker exists for. Staying
@@ -925,14 +1032,30 @@ largest single cost of D15 and it is not optional: a checker that goes blind
 precisely where the arithmetic moved would be worse than no checker, because
 users would not notice.
 
+**What `unitvet` actually needed.** Less than feared, and in one more place than
+expected. The rules did not change at all: a range's dimension, kind and
+quantity are its bounds', so `Add` on a `Range` is `Add` on a `Measurement` as
+far as anything provable is concerned, and the existing rule bodies apply
+unmodified. What changed is that the pass now looks for its types in two
+packages instead of one, that `coreCall` reports which type a call was on as
+well as which method — `Unit.Of` and `uncertainty.Of` share a name and do not
+share an argument — and that the three constructors had to be recognised
+*despite having no receiver*, because every range enters through one of them and
+without them nothing about a range resolves at all. The one thing the pass will
+not say is which interval unit the width of an absolute range is read on: the
+scale declares it, the generated table does not record it, and that is the
+silence a difference of two points already gets.
+
 **What it costs.** A second arithmetic surface — five operations, each with the
 corner analysis that a point does not need: all four products for `Mul`, because
 an interval straddling zero does not take its extreme at the corner one would
 guess, and a divisor whose interval covers zero is an error rather than a bound,
 because the quotient is unbounded and reporting a bound for it would be a lie
-about the data. A rounding mode on `Engine` where there was one. A `unitvet`
-receiver. And section 7 gains an item: whether `Range` is part of the `v1.0.0`
-surface or ships behind it.
+about the data. A rounding mode on `Engine` where there was one, and a decimal
+constructor on `Unit` where there was none. A `unitvet` receiver. And section 7
+gains two items: whether `Range` is part of the `v1.0.0` surface or ships behind
+it, and whether `Unit.OfDecimal` belongs in the frozen surface beside
+`Engine.Rounding`.
 
 ---
 
@@ -1496,6 +1619,17 @@ mine    := parse.New(myUnits)                  // a catalogue of your own
 
 var field parse.Text                           // and a destination that
 err = json.Unmarshal(data, &field)             // carries its parser along
+
+// --- Bounds instead of a point: the interval layer (D15) ------
+
+r, err := uncertainty.Parse("2.55 ± 0.05 bar") // also [2.5, 2.6] bar, 2.55(5) bar
+lo      := r.Lo()                              // 2.5 bar
+w, err  := r.Width()                           // 0.1 bar
+inTorr, err := r.To(pressure.Torr)             // each bound rounds outward
+agree, err  := r.Overlaps(specified)           // so a conversion never
+                                               // manufactures a disagreement
+text, ok := r.PlusMinus()                      // the display form, and whether
+                                               // it says exactly what r says
 ```
 
 ---
@@ -1508,7 +1642,7 @@ err = json.Unmarshal(data, &field)             // carries its parser along
 | `dimension` | the packed word, product, quotient, reciprocal, stringer |
 | `symbol` | SI prefixes, product, quotient and the special forms, spellings |
 | `parse` | reading the text form, resolving unit expressions, `parse.Text` |
-| `uncertainty` | the interval layer of D15 — a magnitude known only to lie between two bounds (planned) |
+| `uncertainty` | the interval layer of D15 — `Range`, its arithmetic with outward-rounding bounds, its text form, its parser and `uncertainty.Text` |
 | `catalog` | the YAML source, the generated index, and the lookups over it |
 | `unitvet`, `cmd/unitvet` | the static dimension checker of D13 |
 | `internal/superscript` | superscript digits for both stringers, and reading them back |
@@ -1617,7 +1751,7 @@ Everything the decisions describe is implemented and enforced:
 | `unitvet` | complete; the corpus asserts the reported and the silent cases alike, and the pass runs clean over this repository, tests and examples included |
 | Coverage gate | 100 % of hand-written statements, enforced in CI, `COVERAGE_EXCEPTIONS.md` empty |
 | The `int64` fast path (D17) | **decided, not built.** It is additive and invisible in the API, so it does not gate `v1.0.0`; what D17 fixes is that there is no type parameter and no facade to build it behind |
-| `uncertainty` (D15) | **decided, not built.** The package, the outward rounding it needs from `Engine`, its text form and its `unitvet` receiver are all specified in D15 and none of them exists yet |
+| `uncertainty` (D15) | complete; a conversion is asserted over the whole catalogue never to narrow a range and never to pull two overlapping ranges apart, the four-corner table of `Mul` and the even-power case of `Pow` are tested case by case, the aliasing guard of D3 covers both bounds at 200 digits, `FuzzRange` holds the text form to a fixed point, and the `unitvet` corpus asserts the reported and the silent cases over ranges as it does over measurements |
 
 **What remains before `v1.0.0` is a deliberate API review.** Until it happens the
 module is tagged `v0.x` and the API may change without notice; any stability
@@ -1651,15 +1785,20 @@ was:
   two readings, because a text that made no claim should not have one invented
   for it. A caller with an expectation converts — `m.To(frequency.Hertz)` — which
   returns hertz or an error, whichever spelling arrived.
-- whether `Engine.Rounding` belongs in the frozen surface. D15 needs it — an
-  interval bound has to round outward, or a conversion can manufacture a
-  disagreement that stands in no source — and it is the one addition to the core
-  that decision makes. It is additive and invisible in the zero `Engine`, so it
-  breaks nothing; but it is a second rounding policy in a library that had
-  exactly one, and the review should see it rather than inherit it
-- whether `uncertainty.Range` ships inside `v1.0.0` or behind it. The layer is
-  decided (D15) and unbuilt, and freezing the core while the first serious
-  consumer of it is unwritten is how an API gains a regret
+- whether `Engine.Rounding` and `Unit.OfDecimal` belong in the frozen surface.
+  Both are what D15 needed from the core — an interval bound has to round
+  outward or a conversion can manufacture a disagreement that stands in no
+  source, and a type holding bare magnitudes has to be able to label them again.
+  Both are additive and invisible to a caller who does not ask: the zero
+  `Engine` is unchanged, and `OfDecimal` is the counterpart of a `Decimal` that
+  was already exported. But `Rounding` is a second rounding policy in a library
+  that had exactly one, and `OfDecimal` widens the door into `Measurement` from
+  two constructors to three. The review should see both rather than inherit them
+- whether `uncertainty.Range` ships inside `v1.0.0` or behind it. The layer now
+  exists and is the first serious consumer of the core, which is what the
+  question was waiting for. What it argues about is `Mid` and `Width` returning
+  errors, `PlusMinus` returning `(string, bool)`, and whether `uncertainty` gets
+  its own `Engine` or borrows the core's
 - ~~`O1`, whether `imperial` is a subpackage or a module~~ — settled as D19: a
   subpackage, `units/customary`, from a catalogue file of its own
 - ~~`O3`, what covers the units the two customary systems disagree about~~ —
@@ -1682,7 +1821,7 @@ additive, opt-in, and can ship a new version independently.
 | Fractional exponents | Occur in correlations (e.g. `m·s⁻⁰·⁵`) but require rationals instead of `int8` in the dimension word. The eight reserved bits from D5 keep that door open. |
 | Units defined through π | The degree of arc, the gon, the oersted. Their factors are rational multiples of π and have no finite decimal form, so D4 cannot store them exactly. Needs a symbolic factor — a fraction plus a π exponent — which changes the shape of every conversion. Left out of the catalogue rather than rounded into it. |
 | Quantities sharing a dimension *and* a symbol | Thermal diffusivity and a diffusion coefficient print as `m²/s`, like kinematic viscosity. The quantity tag of D6 separates them in code, but the text form of D12 has to read back to one unit. Needs a text form that carries the quantity. |
-| Measurement uncertainty — propagation | Still deferred, and the reason is unchanged: it is a large topic of its own with its own error propagation, and it belongs on top of the core rather than in it. What has since been decided is only *where* the layer lives — `metrology/uncertainty`, D15 — and *what* it is: interval arithmetic, which gives worst-case bounds and has the dependency problem. Quadrature combination, correlated quantities and coverage factors are none of it and stay here. |
+| Measurement uncertainty — propagation | Still deferred, and the reason is unchanged: it is a large topic of its own with its own error propagation, and it belongs on top of the core rather than in it. What has since been decided and built is only the *interval* half — `metrology/uncertainty`, D15: worst-case bounds, with the dependency problem and with every bound rounding outward. Quadrature combination, correlated quantities and coverage factors are none of it and stay here. |
 | Non-linear scales | dB, pH, degrees Baumé. They do not fit the factor/offset model of D4 and need their own abstraction. |
 | Localised output | Decimal comma, unit names per language. Maintainable only once the catalogue is settled. |
 | Vector and tensor quantities | A different subject. A library for scalar quantities stays one. |
@@ -1853,6 +1992,33 @@ point is that both render as valid text in the form of D12 and neither says
 which engine produced it. The same test run against an `int64` coefficient
 returns the exact answer down both paths, `0.1 + 0.2 = 0.3` included, which is
 the line between the two readings drawn as a measurement.
+
+### The rounding mode a bound needs (D15)
+
+Two facts about `apd` that the decision got wrong from memory, and that cost
+nothing to check once the code existed:
+
+| Claim in D15 as written | What apd/v3 v3.2.1 says |
+|---|---|
+| the type is `apd.Rounding` | `apd.Rounding` is the *field* on `apd.Context`; the type is `apd.Rounder`, a string |
+| D9 rounds half-even | `apd.BaseContext` leaves `Rounding` empty, and an empty `Rounder` means `RoundHalfUp` (`round.go`, `Rounder.ShouldAddOne`, default case) |
+
+Both matter more than a spelling would, because the whole finding of D15 is
+about which way a bound moves. `Context.Quo` and `Context.Mul` both consult
+`c.Rounding` — `Quo` at the remainder, `Mul` through `c.round` — so setting it
+on the one context `Engine.context` builds reaches every rounding the library
+does, and no second implementation is needed.
+
+The property itself is a test rather than an argument, and it is the one to run
+first after touching any of this:
+
+```sh
+go test -run 'TestConversionNeverNarrows|TestConversionNeverBreaksAnOverlap' ./uncertainty
+```
+
+It converts a range into every other unit of its dimension in the catalogue and
+back, and asserts the result *contains* what went in. Directed rounding got
+backwards fails it in under a second.
 
 ### SSA and generic methods (D13)
 
