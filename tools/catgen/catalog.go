@@ -78,6 +78,17 @@ type symbolSpec struct {
 // qualified is the Go expression referring to a unit from outside its package.
 func (u unitSpec) qualified() string { return u.quantity.Package + "." + u.Go }
 
+// unitsDir is the directory the generated quantity packages live in, below the
+// module root: github.com/timzifer/metrology/units/pressure (D18). It is data,
+// and it is kept out of the module's own namespace so that the seven
+// hand-written packages are not lost among forty-three generated ones.
+const unitsDir = "units"
+
+// importPath is where a generated package is imported from.
+func (q quantity) importPath(module string) string {
+	return module + "/" + unitsDir + "/" + q.Package
+}
+
 // quantityTag is the quantity every unit of this package measures.
 func (u unitSpec) quantityTag() string { return u.quantity.Quantity }
 

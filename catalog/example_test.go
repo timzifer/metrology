@@ -4,12 +4,12 @@ import (
 	"fmt"
 
 	"github.com/timzifer/metrology"
-	"github.com/timzifer/metrology/area"
 	"github.com/timzifer/metrology/catalog"
-	"github.com/timzifer/metrology/force"
-	"github.com/timzifer/metrology/frequency"
-	"github.com/timzifer/metrology/pressure"
-	"github.com/timzifer/metrology/temperature"
+	"github.com/timzifer/metrology/units/area"
+	"github.com/timzifer/metrology/units/force"
+	"github.com/timzifer/metrology/units/frequency"
+	"github.com/timzifer/metrology/units/pressure"
+	"github.com/timzifer/metrology/units/temperature"
 )
 
 func ExampleCanonical() {

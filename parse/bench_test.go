@@ -6,7 +6,7 @@ import (
 
 	"github.com/timzifer/metrology"
 	"github.com/timzifer/metrology/parse"
-	"github.com/timzifer/metrology/pressure"
+	"github.com/timzifer/metrology/units/pressure"
 )
 
 // The reading half of D12, measured. The writing half is benchmarked in the

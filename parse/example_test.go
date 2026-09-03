@@ -8,9 +8,9 @@ import (
 	"github.com/timzifer/metrology"
 	"github.com/timzifer/metrology/dimension"
 	"github.com/timzifer/metrology/parse"
-	"github.com/timzifer/metrology/pressure"
 	"github.com/timzifer/metrology/symbol"
-	"github.com/timzifer/metrology/temperature"
+	"github.com/timzifer/metrology/units/pressure"
+	"github.com/timzifer/metrology/units/temperature"
 )
 
 func ExampleMeasurement() {

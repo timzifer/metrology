@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D17 and referenced
+more importantly, the reasoning — decisions are numbered D1 … D18 and referenced
 from code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
 `CONCEPT.md` and the code is the failure mode to avoid.
@@ -28,6 +28,11 @@ touching it, in particular the rule that an interval bound rounds *outward* and
 the additive `Engine.Rounding` that requires. Uncertainty *propagation* —
 quadrature, correlations, coverage factors — stays deferred in section 8 and is
 not what D15 describes.
+
+The generated quantity packages live under `units/` (D18) —
+`units/pressure`, `units/temperature`. The seven hand-written packages stay at
+the module root. A new quantity package goes under `units/` because that is
+where `catgen` writes it; nothing chooses the directory by hand.
 
 Adding a unit means editing `catalog/catalog.yaml` and running
 `go generate ./...` — never editing a `*_gen.go` file. Every entry needs a

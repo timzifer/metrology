@@ -10,7 +10,7 @@
 | **State** | complete for the scope of section 6; `v1.0.0` awaits the API review of section 7 |
 
 This document holds the architecture and the reasoning behind it. The decisions
-are numbered D1 … D17 and referenced from code comments; a change that
+are numbered D1 … D18 and referenced from code comments; a change that
 contradicts one updates the decision first, in the same pull request, with the
 reason. Silent divergence between this document and the code is the failure mode
 it exists to prevent.
@@ -1195,6 +1195,44 @@ dimension check ever turns out to be worth paying for. Reopening this means
 running `BenchmarkKernel` first: it is in the tree so that the comparison can
 be repeated rather than re-argued.
 
+### D18 — The generated packages live under `units/`
+
+Forty-three of the fifty top-level directories were generated quantity packages.
+The seven that were not — `dimension`, `symbol`, `parse`, `catalog`, `internal`,
+`unitvet`, `tools` — are the library, and at the module root they were the ones
+a reader had to search for. The generated packages therefore move one level
+down:
+
+```
+github.com/timzifer/metrology/units/pressure
+github.com/timzifer/metrology/units/temperature
+```
+
+**It is a directory move and nothing else.** A package's name is the last
+element of its path, so `pressure.Bar` is still `pressure.Bar` and every call
+site in every program is untouched; only import lines change. `catgen` writes
+the directory (`unitsDir` in `tools/catgen/catalog.go`), so nothing chooses it
+by hand, and the same run rewrites the import paths in `catalog/units_gen.go`
+and the keys of `unitvet/table_gen.go` — the checker resolves units by import
+path, and that is exactly why the table is generated with them rather than
+beside them (D13).
+
+**Why now.** An import path is API. After `v1.0.0` this costs a major version or
+a set of forwarding packages; before it, it costs one `go generate` and a
+`gofmt`. The decision is cheap in exactly one window and it is this one.
+
+**What it buys, stated honestly.** Not collision avoidance: a program that
+already has a `duration` package still has to alias one of them, because the
+package *name* did not change. What it buys is that the module root now reads as
+what it is — a library with a catalogue attached — and that the catalogue has a
+name as a group. `units/doc.go` is the only hand-written file under it and
+declares nothing; it exists so the group has a doc page saying what it is and
+where the lookups live.
+
+**`interval` moves with them.** It is a generated quantity package like the
+others — the spans that absolute scales subtract into — and its place beside
+`temperature` under `units/` is the one that reads correctly.
+
 ---
 
 ## 4. The API
@@ -1294,14 +1332,20 @@ err = json.Unmarshal(data, &field)             // carries its parser along
 | `internal/decimaltext` | the shape of a decimal, for the core and the parser |
 | `tools/catgen` | the generator of D8 |
 | `tools/covercheck` | the coverage gate of D14 |
-| `length`, `pressure`, `temperature`, … | one package per quantity, fully generated |
-| `interval` | the interval units the absolute scales subtract into |
+| `units/length`, `units/pressure`, … | one package per quantity, fully generated (D18) |
+| `units/interval` | the interval units the absolute scales subtract into |
 
 **One package per quantity,** because it turns autocompletion into a search
 function: `pressure.` lists exactly the pressure units. Nobody maintains those
 packages by hand — they are generated (D8), one dimension per package, enforced
 by the generator. Where one dimension carries two quantities they are two
 packages, `frequency` and `activity`, each with its tag.
+
+**They live under `units/`** (D18). Forty-three of them against seven
+hand-written packages, and at the module root the seven were the ones that had
+to be searched for. The import path gains a segment, the call sites gain
+nothing — `pressure.Bar` is still `pressure.Bar`, because the package name is
+the last element and that did not change.
 
 **The interval units live apart.** `temperature` holds the absolute scales — °C,
 K, °F — and `interval` the spans they subtract into, so
@@ -1474,7 +1518,7 @@ here and is now D17: no type parameter and no facade, one arithmetic, and an
 A sister package mapping customary units — foot, stone, psi, BTU, gallon — is
 planned. Two shapes are possible.
 
-**Recommendation: a subpackage, `github.com/timzifer/metrology/imperial`.** Go
+**Recommendation: a subpackage, `github.com/timzifer/metrology/units/imperial`.** Go
 links only what is imported, so callers who never touch stones pay nothing for
 their existence. And per D8 these are simply more catalogue entries, produced by
 the same generator; a separate module means either exporting the generator or

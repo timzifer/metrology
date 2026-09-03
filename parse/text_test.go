@@ -12,8 +12,8 @@ import (
 	"github.com/timzifer/metrology"
 	"github.com/timzifer/metrology/dimension"
 	"github.com/timzifer/metrology/parse"
-	"github.com/timzifer/metrology/pressure"
 	"github.com/timzifer/metrology/symbol"
+	"github.com/timzifer/metrology/units/pressure"
 )
 
 // The interfaces the standard library decodes through. A Text implements the
