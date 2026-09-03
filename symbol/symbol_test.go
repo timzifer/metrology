@@ -25,6 +25,31 @@ func TestString(t *testing.T) {
 		{"litre", symbol.Litre(), "L"},
 		{"product", symbol.Product(symbol.SI("N"), symbol.SI("m")), "N·m"},
 		{"product of three", symbol.Product(symbol.SI("N"), symbol.SI("m"), symbol.SI("s")), "N·m·s"},
+		// Repeated multiplicands gather into a power, so that Times spells what
+		// Pow spells and one scale has one rendering (D12).
+		{"a repeated multiplicand gathers", symbol.Product(symbol.SI("m"), symbol.SI("m")), "m²"},
+		{"and gathers onto a power it already has", symbol.Product(symbol.SIPow("m", 2), symbol.SI("m")), "m³"},
+		{"wherever the repetition sits", symbol.Product(symbol.SI("m"), symbol.SI("s"), symbol.SI("m")), "m²·s"},
+		// Only a prefixable symbol gathers. A static carries its power in its
+		// text, so a static that has been raised cannot be recognised as a
+		// power of anything again — and gathering it would make one spelling
+		// read back as another (D12).
+		{"a static symbol does not gather", symbol.Product(symbol.Static("torr"), symbol.Static("torr")), "torr·torr"},
+		{"nor does the kilogram", symbol.Product(symbol.Gram(), symbol.Gram()), "kg·kg"},
+		{"different bases do not gather", symbol.Product(symbol.SI("N"), symbol.SI("N"), symbol.SI("m")), "N²·m"},
+		// A base that cancels drops out rather than rendering as a factor of
+		// one, and a product of one multiplicand is that multiplicand.
+		{"opposite powers cancel", symbol.Product(symbol.SI("m"), symbol.SIPow("m", -1)), "1"},
+		{"a cancelled base leaves the rest", symbol.Product(symbol.SI("m"), symbol.SI("s"), symbol.SIPow("m", -1)), "s"},
+		{"one multiplicand is not a product", symbol.Product(symbol.SI("m")), "m"},
+		// A solidus binds from the left, so N·m/s reads back as (N·m)/s. A
+		// quotient in any but the first place has to bracket itself.
+		{"a quotient multiplicand is parenthesised", symbol.Product(
+			symbol.SI("N"), symbol.Quotient(symbol.SI("m"), symbol.SI("s")),
+		), "N·(m/s)"},
+		{"the first multiplicand needs no brackets", symbol.Product(
+			symbol.Quotient(symbol.SI("m"), symbol.SI("s")), symbol.SI("N"),
+		), "m/s·N"},
 		{"empty product", symbol.Product(), ""},
 		{"quotient", symbol.Quotient(symbol.SI("m"), symbol.SI("s")), "m/s"},
 		{"quotient with a squared numerator", symbol.Quotient(symbol.SIPow("m", 2), symbol.SI("s")), "m²/s"},
@@ -70,12 +95,21 @@ func TestEqual(t *testing.T) {
 			symbol.Product(symbol.SI("N"), symbol.SI("m")), true},
 		{"product order matters", symbol.Product(symbol.SI("N"), symbol.SI("m")),
 			symbol.Product(symbol.SI("m"), symbol.SI("N")), false},
-		{"different part count", symbol.Product(symbol.SI("N")),
-			symbol.Product(symbol.SI("N"), symbol.SI("m")), false},
+		{"different part count", symbol.Product(symbol.SI("N"), symbol.SI("m")),
+			symbol.Product(symbol.SI("N"), symbol.SI("m"), symbol.SI("s")), false},
+		// A product of one multiplicand is that multiplicand, so the two are
+		// not merely equal, they are the same value.
+		{"a product of one is its multiplicand", symbol.Product(symbol.SI("N")),
+			symbol.SI("N"), true},
 		{"same quotient", symbol.Quotient(symbol.SI("m"), symbol.SI("s")),
 			symbol.Quotient(symbol.SI("m"), symbol.SI("s")), true},
 		{"different denominator", symbol.Quotient(symbol.SI("m"), symbol.SI("s")),
 			symbol.Quotient(symbol.SI("m"), symbol.SI("A")), false},
+		// The promise Equal makes is that two symbols rendering alike are
+		// alike, and gathering is what lets it keep the promise here: m·m and
+		// m² are one spelling now, so they are one symbol (D12).
+		{"a gathered product equals the power it spells", symbol.Product(symbol.SI("m"), symbol.SI("m")),
+			symbol.SIPow("m", 2), true},
 		{"gram equals gram", symbol.Gram(), symbol.Gram(), true},
 		{"litre equals litre", symbol.Litre(), symbol.Litre(), true},
 	} {

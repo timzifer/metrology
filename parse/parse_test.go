@@ -198,7 +198,20 @@ func TestQuantityTags(t *testing.T) {
 	if got, want := tagged.Quantity(), metrology.Quantity("kinematic viscosity"); got != want {
 		t.Errorf("quantity of %q = %q, want %q", "5 m²/s", got, want)
 	}
-	computed, err := parse.Measurement("5 m·m/s")
+	// m·m/s gathers into m²/s and is therefore the catalogue entry too (D12):
+	// one scale, one spelling, one tag.
+	gathered, err := parse.Measurement("5 m·m/s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := gathered.Quantity(), metrology.Quantity("kinematic viscosity"); got != want {
+		t.Errorf("quantity of %q = %q, want %q", "5 m·m/s", got, want)
+	}
+
+	// The substitution is on the spelling, and it goes no further: m²·s⁻¹ is
+	// the same scale written another way, no catalogue entry spells it, and so
+	// it stays untagged. Naming it is the caller's explicit step.
+	computed, err := parse.Measurement("5 m²·s⁻¹")
 	if err != nil {
 		t.Fatal(err)
 	}

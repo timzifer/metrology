@@ -83,6 +83,9 @@ func TestDerivedUnitsCarryTheirFactors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// The kilometre is a static symbol, so its square is spelled out rather
+	// than gathered — only a prefixable symbol can have a power added to it
+	// and taken off again (D12).
 	if got := area.String(); got != "6 km·km" {
 		t.Errorf("got %s, want 6 km·km", got)
 	}

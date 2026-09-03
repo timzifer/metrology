@@ -89,6 +89,14 @@ where a `Parser` is a value holding its units and `parse.Text` carries one into
 that reaches for a package-level registry — it would lock out every program with
 units of its own, which is the case the design is built for.
 
+**One scale has one spelling (D12).** `Symbol.Product` gathers repeated
+*prefixable* multiplicands into a power, so `m.Times(m)` is `m²` and equals the
+catalogue's square metre. Only prefixable: a static carries its power in its
+text, so `Static("torr²")` cannot be recognised as a power of torr again, and
+gathering it makes one spelling read back as another — the fuzzer proves this in
+seconds. Do not "finish the job" by cancelling quotients either: `mm/m` is a
+strain, and `1` is not what it means.
+
 **A symbol's spellings are enumerated, never guessed (D12).** `Symbol.Spellings`
 reports every way a symbol may be written, and the parser indexes exactly those.
 A static symbol takes no prefix at all — that is what keeps `cd` the candela and
