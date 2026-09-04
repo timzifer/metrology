@@ -34,6 +34,12 @@ func TestErrorMessages(t *testing.T) {
 		{"a precision error names the request and the limit",
 			&metrology.PrecisionError{Op: "convert", Requested: 1200, Max: 990},
 			"metrology: convert: 1200 significant digits needs more of π than this library holds; the limit is 990"},
+		// The zero Unit renders as the empty string, so this is the one message
+		// that names no operand: quoting it would read "expected , got ".
+		{"a no-scale error names the operation and the remedy",
+			&metrology.NoScaleError{Op: "Add"},
+			"metrology: Add: the zero Unit has no scale; " +
+				"build one with NewUnit or take one from a quantity package"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.err.Error(); got != tc.want {
@@ -57,6 +63,7 @@ func TestErrorClasses(t *testing.T) {
 		{"syntax", &metrology.SyntaxError{}, metrology.ErrSyntax, metrology.ErrRange},
 		{"range", &metrology.RangeError{}, metrology.ErrRange, metrology.ErrSyntax},
 		{"precision", &metrology.PrecisionError{}, metrology.ErrPrecision, metrology.ErrRange},
+		{"no scale", &metrology.NoScaleError{}, metrology.ErrNoScale, metrology.ErrDimension},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if !errors.Is(tc.err, tc.class) {

@@ -100,7 +100,7 @@ func (e Engine) combine(
 	if right.unit.kind == Interval {
 		target = left.unit.linearScale()
 	}
-	converted, err := e.convert(&right.val, right.unit, target)
+	converted, err := e.convert(op, &right.val, right.unit, target)
 	if err != nil {
 		return Measurement{}, err
 	}
@@ -129,7 +129,7 @@ func (m Measurement) Mul(other Measurement) (Measurement, error) {
 
 // Mul is [Measurement.Mul] at this engine's precision (D9).
 func (e Engine) Mul(left, right Measurement) (Measurement, error) {
-	if err := bothIntervals("Mul", left, right); err != nil {
+	if err := intervalUnits("Mul", left.unit, right.unit); err != nil {
 		return Measurement{}, err
 	}
 	return e.scaleBy("Mul", left, right, (*apd.Context).Mul, left.unit.times(right.unit))
@@ -147,7 +147,7 @@ func (m Measurement) Div(other Measurement) (Measurement, error) {
 
 // Div is [Measurement.Div] at this engine's precision (D9).
 func (e Engine) Div(left, right Measurement) (Measurement, error) {
-	if err := bothIntervals("Div", left, right); err != nil {
+	if err := intervalUnits("Div", left.unit, right.unit); err != nil {
 		return Measurement{}, err
 	}
 	return e.scaleBy("Div", left, right, (*apd.Context).Quo, left.unit.byUnit(right.unit))
@@ -194,7 +194,7 @@ func (e Engine) Cmp(left, right Measurement) (int, error) {
 			Why: "a point on a scale and a span along it are not comparable",
 		}
 	}
-	converted, err := e.convert(&right.val, right.unit, left.unit)
+	converted, err := e.convert("Cmp", &right.val, right.unit, left.unit)
 	if err != nil {
 		return 0, err
 	}
@@ -222,17 +222,6 @@ func sameQuantity(op string, left, right Measurement) error {
 	}
 	if !left.unit.quantity.compatible(right.unit.quantity) {
 		return &QuantityError{Op: op, Left: left.unit.quantity, Right: right.unit.quantity}
-	}
-	return nil
-}
-
-// bothIntervals rejects the multiplication of a point on a scale (D6).
-func bothIntervals(op string, left, right Measurement) error {
-	if left.unit.kind == Absolute || right.unit.kind == Absolute {
-		return &KindError{
-			Op: op, Left: left.unit.kind, Right: right.unit.kind,
-			Why: "a point on a scale has no product",
-		}
 	}
 	return nil
 }

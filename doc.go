@@ -6,6 +6,12 @@
 // state. Arithmetic that would violate physics returns an error rather than
 // panicking, and conversions round exactly once, by a documented rule.
 //
+// That promise covers the zero value too: the zero [Unit] is not a scale — no
+// constructor produced it and it holds no factor — so an operation handed one
+// returns [ErrNoScale] instead of dereferencing what is not there. It is what a
+// caller who ignored an error and kept computing arrives with, since every
+// failed operation returns the zero value.
+//
 // Units are not constructed by hand. Each quantity lives in its own package, so
 // that autocompletion doubles as a catalogue:
 //

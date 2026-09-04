@@ -117,6 +117,14 @@ func TestUnitEqual(t *testing.T) {
 			Dimension: Celsius.Dimension(), Kind: metrology.Absolute,
 			Symbol: symbol.Static("°C"), Offset: "273.16",
 		}), false},
+		// Equal reports that two units are the same scale, not that either is
+		// a usable one: two zero Units are the same absence of a scale, and
+		// saying so is what uncertainty.Between relies on for a zero Range.
+		{"the zero unit is the same scale as itself", metrology.Unit{}, metrology.Unit{}, true},
+		// Unnamed agrees with the zero Unit on dimension, kind, quantity and
+		// symbol, so this is the pair that reaches the factors themselves —
+		// where one side has none.
+		{"an unspelled unit of factor one is not the absence of a scale", Unnamed, metrology.Unit{}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.a.Equal(tc.b); got != tc.want {
@@ -133,6 +141,103 @@ func TestIntervalUnit(t *testing.T) {
 	}
 	if !got.Equal(Kelvin) {
 		t.Errorf("interval unit = %s, want K", got)
+	}
+}
+
+// The zero Unit is not a scale, and every operation that would have to read one
+// says so instead of dereferencing what is not there. Before this, all of these
+// panicked — a nil *apd.Decimal reaching apd's own arithmetic — which is the
+// one thing this library promises not to do outside a Must variant.
+//
+// The zero Unit is dimensionless, so the additive paths reach the scale check
+// only against a dimensionless partner; against anything else sameQuantity
+// reports the dimension mismatch first, and rightly.
+func TestZeroUnitHasNoScale(t *testing.T) {
+	zeroUnit := metrology.Unit{}
+	zero := metrology.Measurement{}
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"a product of units", func() error { _, err := zeroUnit.Times(Metre); return err }},
+		{"a product of units, the other way round", func() error { _, err := Metre.Times(zeroUnit); return err }},
+		{"a quotient of units", func() error { _, err := zeroUnit.Per(Metre); return err }},
+		{"a power", func() error { _, err := zeroUnit.Pow(2); return err }},
+		// Pow(0) answers for every built unit without reading its factor. It
+		// does not answer for a unit that has none: one rule, no exception.
+		{"the zeroth power", func() error { _, err := zeroUnit.Pow(0); return err }},
+		{"a product", func() error { _, err := zero.Mul(Metre.Of(1)); return err }},
+		{"a quotient", func() error { _, err := Metre.Of(1).Div(zero); return err }},
+		{"a sum", func() error { _, err := One.Of(1).Add(zero); return err }},
+		{"a sum of two of them", func() error { _, err := zero.Add(zero); return err }},
+		{"a difference", func() error { _, err := zero.Sub(One.Of(1)); return err }},
+		{"a comparison", func() error { _, err := One.Of(1).Cmp(zero); return err }},
+		{"a conversion onto a scale", func() error { _, err := zero.To(One); return err }},
+		{"a conversion off one", func() error { _, err := One.Of(1).To(zeroUnit); return err }},
+		{"a conversion between two of them", func() error { _, err := zero.To(zeroUnit); return err }},
+		// Unnamed is what makes the equal-units fast path in convert agree, so
+		// this is the case a check placed below that fast path would miss.
+		{"a conversion onto a scale that renders the same way", func() error {
+			_, err := zero.To(Unnamed)
+			return err
+		}},
+		{"reading a magnitude out", func() error { _, err := zero.In[float64](One); return err }},
+		{"reading a magnitude out exactly", func() error { _, err := zero.DecimalIn(One); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); !errors.Is(err, metrology.ErrNoScale) {
+				t.Errorf("error = %v, want ErrNoScale", err)
+			}
+		})
+	}
+}
+
+// D11: the class is one half of an error, the context the other, and the
+// message is what a user gets in place of a compile error.
+func TestNoScaleErrorNamesTheOperation(t *testing.T) {
+	_, err := One.Of(1).Add(metrology.Measurement{})
+
+	var ne *metrology.NoScaleError
+	if !errors.As(err, &ne) {
+		t.Fatalf("error = %v, want a *NoScaleError", err)
+	}
+	if ne.Op != "Add" {
+		t.Errorf("Op = %q, want %q", ne.Op, "Add")
+	}
+	want := "metrology: Add: the zero Unit has no scale; " +
+		"build one with NewUnit or take one from a quantity package"
+	if got := ne.Error(); got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// Equal answers a question, not an error (see [metrology.Measurement.Equal]),
+// so the refusal arrives here as false. It is the one place the zero value's
+// new behaviour is silent, which is why it is asserted on its own.
+func TestZeroMeasurementIsEqualToNothing(t *testing.T) {
+	zero := metrology.Measurement{}
+	if zero.Equal(zero) {
+		t.Error("two values that are not measurements compare equal")
+	}
+	if One.Of(0).Equal(zero) {
+		t.Error("a magnitude on a scale equals one on no scale")
+	}
+}
+
+// An accessor has no error channel, so it reports what NewUnit would have
+// defaulted to rather than a nil decimal that moves the dereference one frame
+// out. Compare TestNewUnitDefaults: the answers are the same, and only the
+// arithmetic tells the two units apart.
+func TestZeroUnitReportsTheIdentityFactor(t *testing.T) {
+	zeroUnit := metrology.Unit{}
+
+	f := zeroUnit.Factor()
+	if f.Num.String() != "1" || f.Den.String() != "1" || f.Pi != 0 {
+		t.Errorf("factor = %s/%s·π^%d, want 1/1 with no π", f.Num, f.Den, f.Pi)
+	}
+	if got := zeroUnit.Offset(); got.String() != "0" {
+		t.Errorf("offset = %s, want 0", got)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/timzifer/metrology/units/duration"
 	"github.com/timzifer/metrology/units/interval"
 	"github.com/timzifer/metrology/units/length"
+	"github.com/timzifer/metrology/units/ratio"
 	"github.com/timzifer/metrology/units/temperature"
 )
 
@@ -356,3 +357,34 @@ func errorOf(_ gum.Value, err error) error { return err }
 func errorOfMeasurement(_ metrology.Measurement, err error) error { return err }
 
 func errorOfFreedom(_ int, err error) error { return err }
+
+// The zero Value holds the zero [metrology.Measurement], which is on no scale:
+// the package doc says so, and this is what makes it true rather than a claim
+// about a value that would panic on the way to being used.
+func TestZeroValueHasNoScale(t *testing.T) {
+	var zero gum.Value
+	one := gum.Exactly(length.Metre.Of(1))
+	// The zero Measurement is dimensionless, so a conversion reaches the scale
+	// check only against a dimensionless unit; anything else is a dimension
+	// mismatch first, and rightly.
+	bare := gum.Exactly(ratio.One.Of(1))
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"a conversion", func() error { _, err := zero.To(ratio.One); return err }},
+		{"a conversion onto no scale", func() error { _, err := bare.To(metrology.Unit{}); return err }},
+		{"a sum", func() error { _, err := zero.Add(zero); return err }},
+		{"a difference", func() error { _, err := zero.Sub(zero); return err }},
+		{"a product", func() error { _, err := one.Mul(zero); return err }},
+		{"a quotient", func() error { _, err := one.Div(zero); return err }},
+		{"a power", func() error { _, err := zero.Pow(2); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); !errors.Is(err, metrology.ErrNoScale) {
+				t.Errorf("error = %v, want ErrNoScale", err)
+			}
+		})
+	}
+}

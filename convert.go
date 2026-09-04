@@ -51,7 +51,14 @@ func (c *calc) do(_ apd.Condition, err error) {
 // degree — which is therefore exactly as exact as it was before. Only a
 // conversion that crosses between a π unit and a π-free one puts a number in
 // place of π, and only that one rounds a second time.
-func (e Engine) convert(v *apd.Decimal, from, to Unit) (*apd.Decimal, error) {
+func (e Engine) convert(op string, v *apd.Decimal, from, to Unit) (*apd.Decimal, error) {
+	// Before the fast path below, not after it. Equal answers true for two zero
+	// Units and for a zero Unit beside a constructed one that happens to render
+	// the same way, so a check placed under the fast path would let both
+	// through and return a magnitude read on no scale at all.
+	if !from.hasScale() || !to.hasScale() {
+		return nil, &NoScaleError{Op: op}
+	}
 	if from.Equal(to) {
 		// Not an optimisation: a conversion of a value to its own unit must
 		// return the value, and a division would round it to the engine's
@@ -79,7 +86,7 @@ func (e Engine) convert(v *apd.Decimal, from, to Unit) (*apd.Decimal, error) {
 		negative := (numerator.Sign() < 0) != (denominator.Sign() < 0)
 		power, err := e.piPower(delta, negative)
 		if err != nil {
-			return nil, fmt.Errorf("metrology: convert %s to %s: %w", from, to, err)
+			return nil, fmt.Errorf("metrology: %s: convert %s to %s: %w", op, from, to, err)
 		}
 		if delta > 0 {
 			c.do(exact.Mul(numerator, numerator, power))
@@ -96,7 +103,7 @@ func (e Engine) convert(v *apd.Decimal, from, to Unit) (*apd.Decimal, error) {
 		c.do(exact.Sub(result, result, to.offset))
 	}
 	if c.err != nil {
-		return nil, fmt.Errorf("metrology: convert %s to %s: %w", from, to, c.err)
+		return nil, fmt.Errorf("metrology: %s: convert %s to %s: %w", op, from, to, c.err)
 	}
 	// D9: without this the quotient is padded to the full precision with
 	// zeros, and 2.5 bar serialises as 250000.0000000000000000 Pa.

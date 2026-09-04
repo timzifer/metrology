@@ -28,6 +28,16 @@ import (
 // of arc is π/180 radians for the same reason: 0.017453292519943295 is not what
 // the SI Brochure says, and every conversion out of it would carry a rounding
 // that the definition does not have.
+//
+// # The zero value
+//
+// The zero Unit is not a scale. A concrete value type has a zero value no
+// constructor produced (D1), and this one holds no factor and no offset, so
+// there is nothing to read a magnitude on — every operation that would have to
+// read one returns [ErrNoScale] rather than dereferencing what is not there.
+// The zero [Measurement] carries it, and so does the Unit every failing
+// constructor returns, which is how a caller who ignored one error reaches the
+// arithmetic with it.
 type Unit struct {
 	dim      dimension.Dimension
 	kind     Kind
@@ -195,13 +205,27 @@ type Factor struct {
 
 // Factor returns the exact relation between this unit and the base unit of its
 // dimension. The decimals are copies: a unit never hands out its own (D3).
+//
+// The zero Unit reports 1/1 with no power of π — the identity [NewUnit] would
+// have defaulted to — because an accessor has no error channel and a nil
+// decimal would only move the dereference into the caller. It is not a claim
+// that the zero Unit is a scale: the arithmetic still refuses it with
+// [ErrNoScale], and that is where a caller finds out.
 func (u Unit) Factor() Factor {
+	if !u.hasScale() {
+		return Factor{Num: apd.New(1, 0), Den: apd.New(1, 0)}
+	}
 	return Factor{Num: copyDecimal(u.num), Den: copyDecimal(u.den), Pi: int(u.pi)}
 }
 
 // Offset returns the value added to a magnitude before the factor is applied,
-// as a copy (D3).
-func (u Unit) Offset() *apd.Decimal { return copyDecimal(u.offset) }
+// as a copy (D3). The zero Unit reports 0, for the reason [Unit.Factor] gives.
+func (u Unit) Offset() *apd.Decimal {
+	if !u.hasScale() {
+		return apd.New(0, 0)
+	}
+	return copyDecimal(u.offset)
+}
 
 // IntervalUnit returns the unit a difference of two magnitudes on this scale is
 // expressed in — K for °C — and whether one was declared.
@@ -246,13 +270,30 @@ func sameScale(u, other Unit) bool {
 		return false
 	}
 	if u.num == other.num && u.den == other.den && u.offset == other.offset {
+		// Two zero Units land here as well, on three nil pointers, and the
+		// answer stays true: Equal reports that two units are the same scale,
+		// not that either is a usable one.
 		return true
+	}
+	if !u.hasScale() || !other.hasScale() {
+		// Exactly one of them came from a constructor. They are not the same
+		// scale, and the comparison below would dereference the other's
+		// absent decimals to say so.
+		return false
 	}
 	// Distinct decimals still have to be compared as numbers: 1/2 and 5/10 are
 	// one scale written two ways, and a catalogue is free to write either.
 	return u.offset.Cmp(other.offset) == 0 &&
 		sameRatio(u.num, u.den, other.num, other.den)
 }
+
+// hasScale reports whether u came from a constructor.
+//
+// Every path that builds a Unit — NewUnit, times, byUnit, Pow, linearScale —
+// sets all three decimals or none of them, so the numerator alone settles it.
+// That invariant is what makes this a complete test rather than a heuristic;
+// a new constructor that sets only some of the three would break it.
+func (u Unit) hasScale() bool { return u.num != nil }
 
 // sameRatio reports whether a/b and c/d are the same number, by cross
 // multiplication — exact, and without a division that could round.
