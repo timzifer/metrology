@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D19 and referenced
+more importantly, the reasoning — decisions are numbered D1 … D21 and referenced
 from code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
 `CONCEPT.md` and the code is the failure mode to avoid.
@@ -20,11 +20,18 @@ units of NIST SP 811 that process engineering uses — the text form of D12 read
 and writes (`metrology` writes, `parse` reads), `uncertainty` carries bounds
 instead of a point (D15), `gum` carries an uncertainty budget with the
 provenance of every contribution (D21), and `unitvet` checks dimensions
-statically per D13 over all three. What remains before `v1.0.0` is the
-deliberate API review of
-section 7 of `CONCEPT.md`; until then the module is `v0.x` and the API may
-change. Section 7 also records what is complete and what each subsystem is
-measured by.
+statically per D13 over all three. What remains before `v1.0.0` are three items
+of the deliberate API review of section 7 of `CONCEPT.md`; until then the module
+is `v0.x` and the API may change. Section 7 also records what is complete and
+what each subsystem is measured by.
+
+What is *not* open any more is the exported surface of `uncertainty` and `gum`:
+both layers ship inside `v1.0.0`, together with the `Engine.Rounding` and
+`Unit.OfDecimal` they need from the core. Adding a method to either is still
+free. Changing a signature there is a `v2`, not a refactoring — so a cleanup
+that would reshape `Mid`, `Width`, `PlusMinus`, `uncertainty.Engine`, `Input`,
+`Standard`, `Apply` or `EffectiveFreedom` needs the decision changed first, and
+D15 and D21 say why each has the shape it has.
 
 `metrology/uncertainty` is the interval layer of D15 — `Range`, a magnitude
 known only to lie between two bounds. Read D15 before touching it. Uncertainty

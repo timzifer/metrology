@@ -219,6 +219,28 @@ func TestSymmetricRefusesAPointTolerance(t *testing.T) {
 	}
 }
 
+// A negative tolerance turns the bounds around, and the error names Symmetric
+// rather than the Between it delegates to. D11 makes the message the substitute
+// for a compile error, so the operation it names has to be the one standing in
+// the caller's source.
+func TestSymmetricNamesItselfInItsError(t *testing.T) {
+	_, err := uncertainty.Symmetric(of(t, length.Metre, "1"), of(t, length.Metre, "-2"))
+	if !errors.Is(err, uncertainty.ErrReversed) {
+		t.Fatalf("got %v, want ErrReversed", err)
+	}
+	const want = "uncertainty: Symmetric: the lower bound 3 m is above the upper bound -1 m"
+	if err.Error() != want {
+		t.Errorf("message is %q,\n           want %q", err, want)
+	}
+	var reversed *uncertainty.ReversedError
+	if !errors.As(err, &reversed) {
+		t.Fatalf("got %T, want *uncertainty.ReversedError", err)
+	}
+	if reversed.Op != "Symmetric" {
+		t.Errorf("Op is %q, want %q", reversed.Op, "Symmetric")
+	}
+}
+
 // The zero Range holds the zero [metrology.Unit], which is not a scale: the
 // package doc says so, and this is what makes that true rather than a claim
 // about a value that used to panic instead.

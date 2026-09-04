@@ -876,8 +876,10 @@ because "which function dropped" is the only useful form of a coverage failure.
 
 ### D15 — Uncertainty as a layer: `metrology/uncertainty`
 
-**Status:** built. `Range`, its arithmetic, its text form, its parser and the
-`unitvet` receiver all exist, and section 7 records what each is measured by.
+**Status:** built and frozen. `Range`, its arithmetic, its text form, its
+parser and the `unitvet` receiver all exist, section 7 records what each is
+measured by, and it has since settled that the type ships inside `v1.0.0` —
+see **The freeze** at the end of this decision.
 
 Five things this decision said turned out to be wrong when it met the code. They
 are corrected in place below and marked **Correction**, rather than quietly
@@ -1101,6 +1103,26 @@ constructor on `Unit` where there was none. A `unitvet` receiver. And section 7
 gains two items: whether `Range` is part of the `v1.0.0` surface or ships behind
 it, and whether `Unit.OfDecimal` belongs in the frozen surface beside
 `Engine.Rounding`.
+
+**The freeze.** Both of those items are now answered, and both answers are yes.
+`Range` ships inside `v1.0.0`, which makes its exported shape a compatibility
+promise rather than a sketch, and the three things the layer argued about are
+frozen as they were built. `Mid` and `Width` keep the error the correction above
+gave them, because a total signature would have to swallow a failure that is
+reachable and tested. `PlusMinus` keeps `(string, bool)`, because there is one
+reason for a no and one thing to do about it — `String` — so an error would
+carry nothing the caller does not already have. `uncertainty.Engine` stays a
+type of its own *because* it carries no rounding mode: it is the enforcement of
+the finding above, and a `metrology.Engine` in its place would hand the caller
+the one knob this decision takes away. `Engine.Rounding` and `Unit.OfDecimal`
+are frozen with it, for the reason section 7 gives: two shipped layers ask for
+exactly those two, and freezing a layer without the hooks it stands on would be
+freezing nothing.
+
+What the freeze does not close is addition. `Range` has no `Contains`, no
+`Equal` and no `Cmp`, and a later release may add all three: a method added is
+additive, where a signature changed is a `v2`. The freeze is about the shapes,
+and the shapes are the three above.
 
 ---
 
@@ -1740,12 +1762,14 @@ branch that runs only when the exponents fail to cancel.
 
 ### D21 — GUM propagation: `metrology/gum`, linear terms with provenance
 
-**Status:** built. Section 8 had deferred uncertainty *propagation* since the
-beginning and D15 built only the interval half; this is the other half, a second
-layer beside `uncertainty` and not an extension of it. Section 7 records what
-each part is measured by. Six things this decision said turned out to be wrong
-or incomplete when it met the code, and they are corrected in place below and
-marked **Correction**, as D15's and D20's are.
+**Status:** built and frozen. Section 8 had deferred uncertainty *propagation*
+since the beginning and D15 built only the interval half; this is the other
+half, a second layer beside `uncertainty` and not an extension of it. Section 7
+records what each part is measured by, and it has since settled that `Value`
+ships inside `v1.0.0` — see **The freeze** at the end of this decision. Six
+things this decision said turned out to be wrong or incomplete when it met the
+code, and they are corrected in place below and marked **Correction**, as D15's
+and D20's are.
 
 **Why not inside `uncertainty`.** The two models disagree on purpose. In the
 interval layer `x − x` is not zero and must not be, because the layer knows
@@ -1949,6 +1973,30 @@ built by one of them resolves to nothing and the pass says nothing about it. The
 alternative — teaching the checker to track stores into a local struct — is the
 guessing D13 forbids, and the positional `Standard` exists partly so that the
 common case stays provable.
+
+**The freeze.** `Value` ships inside `v1.0.0`, and the three things this layer
+argued about are frozen as they were built. `Input` and `Standard` both stay:
+they are not two spellings of one thing, because `Input` is the extensible form
+— a field added after the freeze is additive — and `Standard` is the
+two-argument case that never has to grow *and* the one the correction above
+keeps provable for `unitvet`. Keeping only the struct would put every budget in
+ceremony and blind the checker on the common case; keeping only the pair would
+leave a name and a degree of freedom nowhere to go. `Apply` keeps its shape,
+with the derivative a `Measurement` rather than a number, so that the core
+checks ∂f/∂x · u(x) against the span unit of the result and a derivative in the
+wrong units is a dimension error instead of a plausible answer; there is still
+deliberately no automatic differentiation. And `EffectiveFreedom` stays in a
+package that ships no table, because ν_eff is computed *from* the budget and
+only the budget holds the contributions it needs, where Table G.2 is a lookup
+that needs no budget and would arrive here with nothing to check it against.
+Dropping the method would leave ν_eff computable nowhere; adding the table would
+put a page of unchecked numbers in a repository that refuses them everywhere
+else.
+
+`Engine.Rounding` and `Unit.OfDecimal` are frozen with this layer as with D15's:
+this package needs exactly those two from the core and nothing else, which is
+half of section 7's reason for freezing them.
+
 ---
 
 ## 4. The API
@@ -2180,12 +2228,13 @@ Everything the decisions describe is implemented and enforced:
 | `unitvet` | complete; the corpus asserts the reported and the silent cases alike, and the pass runs clean over this repository, tests and examples included |
 | Coverage gate | 100 % of hand-written statements, enforced in CI, `COVERAGE_EXCEPTIONS.md` empty |
 | Symbolic factors (D20) | complete; the constant is checked against Machin's formula, every crossing conversion in the catalogue is checked against the same conversion at sixty digits, the four sign combinations of a directed bound are asserted case by case, and the property test of D15 runs over the π units as it does over the rest |
-| GUM propagation, `metrology/gum` (D21) | complete; `x − x` and `x / x` are asserted to have no uncertainty at all, the product rule and the four correlation coefficients are checked against numbers computed by hand, a worked budget is a runnable example, the aliasing guard of D3 covers a value at 200 digits, and the `unitvet` corpus asserts the reported and the silent cases over values as it does over ranges |
+| GUM propagation, `metrology/gum` (D21) | complete; `x − x` and `x / x` are asserted to have no uncertainty at all, the product rule and the four correlation coefficients are checked against numbers computed by hand, a worked budget is a runnable example, the aliasing guard of D3 covers a value at 200 digits, and the `unitvet` corpus asserts the reported and the silent cases over values as it does over ranges; its exported surface is inside `v1.0.0` |
 | The `int64` fast path (D17) | **decided, not built.** It is additive and invisible in the API, so it does not gate `v1.0.0`; what D17 fixes is that there is no type parameter and no facade to build it behind |
-| `uncertainty` (D15) | complete; a conversion is asserted over the whole catalogue never to narrow a range and never to pull two overlapping ranges apart, the four-corner table of `Mul` and the even-power case of `Pow` are tested case by case, the aliasing guard of D3 covers both bounds at 200 digits, `FuzzRange` holds the text form to a fixed point, and the `unitvet` corpus asserts the reported and the silent cases over ranges as it does over measurements |
+| `uncertainty` (D15) | complete; a conversion is asserted over the whole catalogue never to narrow a range and never to pull two overlapping ranges apart, the four-corner table of `Mul` and the even-power case of `Pow` are tested case by case, the aliasing guard of D3 covers both bounds at 200 digits, `FuzzRange` holds the text form to a fixed point, and the `unitvet` corpus asserts the reported and the silent cases over ranges as it does over measurements; its exported surface is inside `v1.0.0` |
 
-**What remains before `v1.0.0` is a deliberate API review.** Until it happens the
-module is tagged `v0.x` and the API may change without notice; any stability
+**What remains before `v1.0.0` is a deliberate API review**, and three of its
+items are still open. Until it happens the module is tagged `v0.x` and the API
+may change without notice; any stability
 promise made before the review is one to regret later. The review has to settle,
 at minimum — items already settled are struck through rather than deleted, so
 that a reader who remembers the question finds the answer where the question
@@ -2216,35 +2265,72 @@ was:
   two readings, because a text that made no claim should not have one invented
   for it. A caller with an expectation converts — `m.To(frequency.Hertz)` — which
   returns hertz or an error, whichever spelling arrived.
-- whether `Engine.Rounding` and `Unit.OfDecimal` belong in the frozen surface.
-  Both are what D15 needed from the core — an interval bound has to round
-  outward or a conversion can manufacture a disagreement that stands in no
+- ~~whether `Engine.Rounding` and `Unit.OfDecimal` belong in the frozen
+  surface~~ — **settled: both do**, and settled by the item below rather than on
+  their own. Both are what D15 needed from the core — an interval bound has to
+  round outward or a conversion can manufacture a disagreement that stands in no
   source, and a type holding bare magnitudes has to be able to label them again.
   Both are additive and invisible to a caller who does not ask: the zero
   `Engine` is unchanged, and `OfDecimal` is the counterpart of a `Decimal` that
-  was already exported. But `Rounding` is a second rounding policy in a library
-  that had exactly one, and `OfDecimal` widens the door into `Measurement` from
-  two constructors to three. The review should see both rather than inherit them.
-  What has changed since the question was written is that both have a second
-  consumer: D21 needs exactly these two and nothing else, and D20 needs
-  `Rounding` for the direction a π factor moves a bound in. A hook two layers
-  ask for is a hook, not an accident
+  was already exported. Against them stood that `Rounding` is a second rounding
+  policy in a library that had exactly one, and that `OfDecimal` widens the door
+  into `Measurement` from two constructors to three — which is why the review
+  had to see both rather than inherit them. What decides it is that neither is
+  one layer's convenience: D21 needs exactly these two and nothing else, D20
+  needs `Rounding` for the direction a π factor moves a bound in, and both of
+  those layers ship inside `v1.0.0`. A hook two shipped layers ask for is a
+  hook, not an accident — and freezing the layers without freezing the two
+  hooks they are built on would be freezing nothing
 - ~~the shape of `Unit.Factor`~~ — **settled by building D20 first.** The getter
   returns a `Factor` struct carrying the π exponent beside the fraction, because
   a caller reading the fraction alone computes a wrong number and the compiler
   has to stop that caller. This was the one item whose *order* was decided rather
   than open, and it is done: the change was free in `v0.x` and would have been a
   `v2` after the freeze. What the review still sees is the struct itself
-- whether `uncertainty.Range` and `gum.Value` ship inside `v1.0.0` or behind it.
-  Both layers now exist and are the first serious consumers of the core, which is
-  what the question was waiting for. What the interval layer argues about is
-  `Mid` and `Width` returning errors, `PlusMinus` returning `(string, bool)`, and
-  whether it gets its own `Engine` or borrows the core's. What the propagation
-  layer argues about is narrower, because it added nothing to the core: whether
-  `Input` as a struct and `Standard` as a positional pair are both wanted,
-  whether `Apply` is the right shape for a model the package cannot
-  differentiate, and whether `EffectiveFreedom` belongs in a package that ships
-  no table to use it with
+- ~~whether `uncertainty.Range` and `gum.Value` ship inside `v1.0.0` or behind
+  it~~ — **settled: both ship inside, and each of the six arguments is frozen as
+  built.** Both layers exist, both are the first serious consumers of the core,
+  and the table above records what each is measured by. A layer that is complete
+  and measured and still held behind the freeze is a layer nobody can depend on,
+  for no reason anybody can name.
+
+  **The interval layer.** `Mid` and `Width` keep their error, because D15's own
+  correction established that neither is total and that both failures are
+  reachable and tested; a signature without the error would have to swallow one
+  of them. `PlusMinus` keeps `(string, bool)`: there is exactly one reason for a
+  no and exactly one thing to do about it, which is `String`, so an error value
+  would carry nothing the caller does not already have — it is the
+  `String`/`Prefixed` split of D12 with the same rule. And `uncertainty.Engine`
+  stays a type of its own precisely *because* it carries no rounding mode.
+  Borrowing `metrology.Engine` would hand the caller the one knob D15 takes
+  away, and outward rounding is the property the layer exists for; the type is
+  the enforcement.
+
+  **The propagation layer.** `Input` and `Standard` both stay, because they are
+  not two spellings of one thing. `Input` is the extensible form, so a field
+  added after the freeze is additive; `Standard` is the two-argument case that
+  never has to grow, and D21 already records a second reason for it — a
+  composite literal is a container read `unitvet` does not follow, so the
+  positional constructor is the one that keeps the common case provable. Keeping
+  only the struct puts every budget in ceremony and blinds the checker; keeping
+  only the pair leaves a name and a degree of freedom nowhere to go. `Apply`
+  keeps its shape — an estimate and one `Partial` per input, with the derivative
+  a `Measurement` rather than a number, so the core checks ∂f/∂x · u(x) against
+  the span unit of the result and a derivative in the wrong units is a dimension
+  error instead of a plausible answer. `EffectiveFreedom` stays: ν_eff is
+  computed *from* the budget by Welch-Satterthwaite and only the budget holds
+  the contributions that go into it, whereas Table G.2 is a lookup that needs no
+  budget and would arrive here with nothing to check it against — the thing D4
+  refuses for a conversion factor. Dropping the method would leave ν_eff
+  computable nowhere; shipping the table would put a page of unchecked numbers
+  in a repository that refuses them everywhere else.
+
+  **What the freeze does not close.** Additions. `Range` has no `Contains`, no
+  `Equal` and no `Cmp` where the core has two of the three, and the freeze does
+  not decide that: a method added later is additive and costs a caller nothing.
+  What a freeze cannot repair afterwards is a *shape* — an error that should not
+  be there, a positional pair that should have been a struct — and those are the
+  six settled above
 - ~~`O1`, whether `imperial` is a subpackage or a module~~ — settled as D19: a
   subpackage, `units/customary`, from a catalogue file of its own
 - ~~`O3`, what covers the units the two customary systems disagree about~~ —
