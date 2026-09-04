@@ -11,8 +11,12 @@ import (
 // the package-level variable holding it.
 var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/current.Ampere":                          {dim: dimension.New(dimension.Exponents{ElectricCurrent: 1})},                                   // ampere
+	"github.com/timzifer/metrology/units/fieldstrength.AmperePerMetre":            {dim: dimension.New(dimension.Exponents{Length: -1, ElectricCurrent: 1})},                       // ampere_per_metre
 	"github.com/timzifer/metrology/units/length.Angstrom":                         {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // angstrom
+	"github.com/timzifer/metrology/units/angle.Arcminute":                         {dim: dimension.New(dimension.Exponents{}), quantity: "plane angle"},                            // arcminute
+	"github.com/timzifer/metrology/units/angle.Arcsecond":                         {dim: dimension.New(dimension.Exponents{}), quantity: "plane angle"},                            // arcsecond
 	"github.com/timzifer/metrology/units/area.Are":                                {dim: dimension.New(dimension.Exponents{Length: 2})},                                            // are
+	"github.com/timzifer/metrology/units/length.AstronomicalUnit":                 {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // astronomical_unit
 	"github.com/timzifer/metrology/units/pressure.Atmosphere":                     {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // atmosphere
 	"github.com/timzifer/metrology/units/pressure.Bar":                            {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // bar
 	"github.com/timzifer/metrology/units/area.Barn":                               {dim: dimension.New(dimension.Exponents{Length: 2})},                                            // barn
@@ -26,6 +30,7 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/volumeflow.CubicMetrePerSecond":          {dim: dimension.New(dimension.Exponents{Time: -1, Length: 3})},                                  // cubic_metre_per_second
 	"github.com/timzifer/metrology/units/activity.Curie":                          {dim: dimension.New(dimension.Exponents{Time: -1}), quantity: "radioactivity"},                  // curie
 	"github.com/timzifer/metrology/units/duration.Day":                            {dim: dimension.New(dimension.Exponents{Time: 1})},                                              // day
+	"github.com/timzifer/metrology/units/angle.Degree":                            {dim: dimension.New(dimension.Exponents{}), quantity: "plane angle"},                            // degree
 	"github.com/timzifer/metrology/units/force.Dyne":                              {dim: dimension.New(dimension.Exponents{Time: -2, Length: 1, Mass: 1})},                         // dyne
 	"github.com/timzifer/metrology/units/energy.Electronvolt":                     {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2, Mass: 1})},                         // electronvolt
 	"github.com/timzifer/metrology/units/energy.Erg":                              {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2, Mass: 1})},                         // erg
@@ -37,6 +42,7 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/customary/imperial.Gallon":               {dim: dimension.New(dimension.Exponents{Length: 3})},                                            // gallon_imperial
 	"github.com/timzifer/metrology/units/customary/us.Gallon":                     {dim: dimension.New(dimension.Exponents{Length: 3})},                                            // gallon_us
 	"github.com/timzifer/metrology/units/fluxdensity.Gauss":                       {dim: dimension.New(dimension.Exponents{Time: -2, Mass: 1, ElectricCurrent: -1})},               // gauss
+	"github.com/timzifer/metrology/units/angle.Gon":                               {dim: dimension.New(dimension.Exponents{}), quantity: "plane angle"},                            // gon
 	"github.com/timzifer/metrology/units/density.GramPerLitre":                    {dim: dimension.New(dimension.Exponents{Length: -3, Mass: 1})},                                  // gram_per_litre
 	"github.com/timzifer/metrology/units/absorbeddose.Gray":                       {dim: dimension.New(dimension.Exponents{Time: -2, Length: 2}), quantity: "absorbed dose"},       // gray
 	"github.com/timzifer/metrology/units/area.Hectare":                            {dim: dimension.New(dimension.Exponents{Length: 2})},                                            // hectare
@@ -73,9 +79,11 @@ var catalogue = map[string]scale{
 	"github.com/timzifer/metrology/units/concentration.MolePerLitre":              {dim: dimension.New(dimension.Exponents{Length: -3, AmountOfSubstance: 1})},                     // mole_per_litre
 	"github.com/timzifer/metrology/units/force.Newton":                            {dim: dimension.New(dimension.Exponents{Time: -2, Length: 1, Mass: 1})},                         // newton
 	"github.com/timzifer/metrology/units/surfacetension.NewtonPerMetre":           {dim: dimension.New(dimension.Exponents{Time: -2, Mass: 1})},                                    // newton_per_metre
+	"github.com/timzifer/metrology/units/fieldstrength.Oersted":                   {dim: dimension.New(dimension.Exponents{Length: -1, ElectricCurrent: 1})},                       // oersted
 	"github.com/timzifer/metrology/units/resistance.Ohm":                          {dim: dimension.New(dimension.Exponents{Time: -3, Length: 2, Mass: 1, ElectricCurrent: -2})},    // ohm
 	"github.com/timzifer/metrology/units/ratio.One":                               {dim: dimension.New(dimension.Exponents{})},                                                     // one
 	"github.com/timzifer/metrology/units/customary.Ounce":                         {dim: dimension.New(dimension.Exponents{Mass: 1})},                                              // ounce
+	"github.com/timzifer/metrology/units/length.Parsec":                           {dim: dimension.New(dimension.Exponents{Length: 1})},                                            // parsec
 	"github.com/timzifer/metrology/units/pressure.Pascal":                         {dim: dimension.New(dimension.Exponents{Time: -2, Length: -1, Mass: 1})},                        // pascal
 	"github.com/timzifer/metrology/units/viscosity.PascalSecond":                  {dim: dimension.New(dimension.Exponents{Time: -1, Length: -1, Mass: 1})},                        // pascal_second
 	"github.com/timzifer/metrology/units/ratio.Percent":                           {dim: dimension.New(dimension.Exponents{})},                                                     // percent

@@ -203,15 +203,19 @@ func sameScale(a, b metrology.Unit) bool {
 	if a.Dimension() != b.Dimension() || a.Kind() != b.Kind() {
 		return false
 	}
-	aNum, aDen := a.Factor()
-	bNum, bDen := b.Factor()
+	af, bf := a.Factor(), b.Factor()
+	if af.Pi != bf.Pi {
+		// D20: πᵈ is rational only for d = 0, so two factors whose exponents
+		// differ are two different numbers whatever their fractions say.
+		return false
+	}
 	var left, right apd.Decimal
 	ctx := apd.BaseContext
 	ctx.Precision = 0
 	// Cross multiplication compares two fractions without a division that
 	// could round, and an exact multiplication of finite decimals cannot fail.
-	_, _ = ctx.Mul(&left, aNum, bDen)
-	_, _ = ctx.Mul(&right, bNum, aDen)
+	_, _ = ctx.Mul(&left, af.Num, bf.Den)
+	_, _ = ctx.Mul(&right, bf.Num, af.Den)
 	return left.Cmp(&right) == 0
 }
 
@@ -258,7 +262,8 @@ func (p Parser) otherKind() metrology.Kind {
 // a decimal exponent changes neither the sign of a factor nor the kind of a
 // scale, which are the only things [metrology.NewUnit] rejects.
 func prefixedUnit(u metrology.Unit, exponent int, text string) metrology.Unit {
-	num, den := u.Factor()
+	factor := u.Factor()
+	num, den := factor.Num, factor.Den
 	offset := u.Offset()
 	if exponent >= 0 {
 		shift(num, exponent)
@@ -274,6 +279,7 @@ func prefixedUnit(u metrology.Unit, exponent int, text string) metrology.Unit {
 		Symbol:      symbol.Static(text),
 		Numerator:   num.Text('f'),
 		Denominator: den.Text('f'),
+		Pi:          factor.Pi,
 		Offset:      offset.Text('f'),
 	}
 	if interval, ok := u.IntervalUnit(); ok {

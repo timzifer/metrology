@@ -5,6 +5,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/timzifer/metrology"
 )
 
@@ -161,5 +162,157 @@ func TestConversionRoundsOnceAndReduces(t *testing.T) {
 	// twenty significant digits, with no trailing zeros bolted on.
 	if want := "133.32236842105263158 Pa"; got.String() != want {
 		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
+// D20: the π exponents of two units subtract, so a conversion that stays
+// inside them cancels π and computes exactly what D4 always computed. This is
+// the half of D20 that costs nothing, and it is the half that carries the
+// catalogue: a degree is exactly 3600 arcseconds, in every precision.
+func TestPiExponentsCancel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		from metrology.Measurement
+		to   metrology.Unit
+		want string
+	}{
+		{"a degree is 3600 arcseconds exactly", Degree.Of(1), Arcsecond, "3600 ″"},
+		{"and an arcsecond a 3600th of a degree", Arcsecond.Of(3600), Degree, "1 °"},
+		{"a third of a degree keeps its digits", mustOf(Degree, "0.5"), Arcsecond, "1800 ″"},
+		{"an oersted is an oersted", Oersted.Of(2.5), Oersted, "2.5 Oe"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.from.To(tc.to)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.String() != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// The crossing conversion is the one D20 pays for: π is a number here and the
+// result rounds twice, once at π and once at the division. This is the test
+// that says the second rounding does not reach the digits reported — the same
+// conversion at sixty digits, rounded back to twenty, has to be the same
+// answer.
+//
+// It is a comparison against more precision rather than against a literal
+// because a literal would be this library computing its own expectation. The
+// digits of π themselves are checked in internal/pi, against Machin's formula.
+func TestCrossingPiConversionAgreesWithMorePrecision(t *testing.T) {
+	reference := metrology.NewEngine(60)
+
+	for _, pair := range []struct {
+		from metrology.Unit
+		to   metrology.Unit
+	}{
+		{Degree, Radian}, // the exponent multiplies the numerator
+		{Radian, Degree}, // and here the denominator
+		{Oersted, AmperePerMetre},
+		{AmperePerMetre, Oersted},
+	} {
+		for _, magnitude := range []string{"1", "2.5", "-7", "180", "0.000001", "123456789.123456789"} {
+			t.Run(pair.from.String()+"→"+pair.to.String()+"/"+magnitude, func(t *testing.T) {
+				start := mustOf(pair.from, magnitude)
+
+				got, err := start.To(pair.to)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				want, err := reference.To(start, pair.to)
+				if err != nil {
+					t.Fatalf("unexpected error at sixty digits: %v", err)
+				}
+
+				ctx := apd.BaseContext
+				ctx.Precision = metrology.DefaultPrecision
+				var rounded apd.Decimal
+				if _, err := ctx.Round(&rounded, want.Decimal()); err != nil {
+					t.Fatalf("rounding the reference: %v", err)
+				}
+				if got.Decimal().Cmp(&rounded) != 0 {
+					t.Errorf("got %s, want %s (from %s at sixty digits)", got, &rounded, want)
+				}
+			})
+		}
+	}
+}
+
+// A converted bound has to move outward whatever the conversion does with π
+// (D15, D20). Which direction π itself has to be rounded in depends on two
+// signs — the exponent's and the magnitude's — so all four combinations are
+// here, and each one is checked against a reference computed with far more
+// digits than either bound reports.
+func TestPiBoundsRoundOutward(t *testing.T) {
+	lower := metrology.Engine{}.Rounding(apd.RoundFloor)
+	upper := metrology.Engine{}.Rounding(apd.RoundCeiling)
+	reference := metrology.NewEngine(60)
+
+	for _, tc := range []struct {
+		name string
+		from metrology.Measurement
+		to   metrology.Unit
+	}{
+		{"a positive magnitude out of the π units", Degree.Of(180), Radian},
+		{"a negative one", Degree.Of(-180), Radian},
+		{"a positive magnitude into them", Radian.Of(1), Degree},
+		{"a negative one into them", Radian.Of(-1), Degree},
+		{"a positive magnitude where the exponent is negative", Oersted.Of(1), AmperePerMetre},
+		{"and a negative one", Oersted.Of(-1), AmperePerMetre},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lo, err := lower.To(tc.from, tc.to)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			hi, err := upper.To(tc.from, tc.to)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			want, err := reference.To(tc.from, tc.to)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if lo.Decimal().Cmp(want.Decimal()) > 0 {
+				t.Errorf("the lower bound %s is above the value %s", lo, want)
+			}
+			if hi.Decimal().Cmp(want.Decimal()) < 0 {
+				t.Errorf("the upper bound %s is below the value %s", hi, want)
+			}
+			if lo.Decimal().Cmp(hi.Decimal()) >= 0 {
+				t.Errorf("the bounds %s and %s do not enclose anything", lo, hi)
+			}
+		})
+	}
+}
+
+// The digits of π are a constant, so there is a precision past which a crossing
+// conversion cannot be served. It fails there rather than returning fewer
+// correct digits than the engine promises (D20).
+func TestPiConversionRefusesPrecisionBeyondTheConstant(t *testing.T) {
+	_, err := metrology.NewEngine(1000).To(Degree.Of(1), Radian)
+	if !errors.Is(err, metrology.ErrPrecision) {
+		t.Fatalf("got %v, want ErrPrecision", err)
+	}
+
+	var precision *metrology.PrecisionError
+	if !errors.As(err, &precision) {
+		t.Fatalf("got %v, want a *PrecisionError", err)
+	}
+	if precision.Requested != 1000 {
+		t.Errorf("Requested = %d, want 1000", precision.Requested)
+	}
+	if precision.Max == 0 || precision.Max >= precision.Requested {
+		t.Errorf("Max = %d, want a limit below the request", precision.Max)
+	}
+
+	// The same engine converts anything without a π in it, because nothing
+	// there needs a digit of π at all.
+	if _, err := metrology.NewEngine(1000).To(Degree.Of(1), Arcsecond); err != nil {
+		t.Errorf("a conversion that cancels π should not need it: %v", err)
 	}
 }

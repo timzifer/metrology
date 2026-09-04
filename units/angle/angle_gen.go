@@ -6,9 +6,10 @@
 // why it carries a quantity tag: without one, an angle and a bare number
 // would be the same thing to the arithmetic (D6).
 //
-// The degree of arc is not here. It is π/180 radians, and π has no exact
-// decimal fraction — a rounded factor in this catalogue would be exactly
-// what D4 forbids.
+// Every unit here but the radian is defined through π and carries the
+// exponent of D20. Between them the exponents cancel — a degree is exactly
+// 3600 arcseconds and nothing rounds — and only a conversion to or from the
+// radian puts digits in place of π.
 package angle
 
 import (
@@ -35,4 +36,48 @@ var Radian = metrology.MustUnit(metrology.UnitDef{
 	Dimension: dim,
 	Quantity:  Quantity,
 	Symbol:    symbol.Static("rad"),
+})
+
+// Degree is the degree of arc, π/180 radians, and a full turn in 360 of them.
+//
+// Source: SI Brochure 9th ed., §4.1 Table 8
+var Degree = metrology.MustUnit(metrology.UnitDef{
+	Dimension:   dim,
+	Quantity:    Quantity,
+	Symbol:      symbol.Static("°"),
+	Denominator: "180",
+	Pi:          1,
+})
+
+// Arcminute is a sixtieth of a degree.
+//
+// Source: SI Brochure 9th ed., §4.1 Table 8
+var Arcminute = metrology.MustUnit(metrology.UnitDef{
+	Dimension:   dim,
+	Quantity:    Quantity,
+	Symbol:      symbol.Static("′"),
+	Denominator: "10800",
+	Pi:          1,
+})
+
+// Arcsecond is a sixtieth of an arcminute, and the angle a parsec is named for.
+//
+// Source: SI Brochure 9th ed., §4.1 Table 8
+var Arcsecond = metrology.MustUnit(metrology.UnitDef{
+	Dimension:   dim,
+	Quantity:    Quantity,
+	Symbol:      symbol.Static("″"),
+	Denominator: "648000",
+	Pi:          1,
+})
+
+// Gon is the gon, also called the grad or the gradian, a right angle in a hundred of them.
+//
+// Source: NIST SP 811 (2008), Appendix B.8 (grade)
+var Gon = metrology.MustUnit(metrology.UnitDef{
+	Dimension:   dim,
+	Quantity:    Quantity,
+	Symbol:      symbol.Static("gon"),
+	Denominator: "200",
+	Pi:          1,
 })

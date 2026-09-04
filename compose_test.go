@@ -199,3 +199,56 @@ func TestComposeDropsQuantityAndKind(t *testing.T) {
 		t.Errorf("kind = %s, want interval", got)
 	}
 }
+
+// D20: a π exponent composes the way the dimension exponents do — added by a
+// product, subtracted by a quotient, multiplied by a power. That is what makes
+// the square degree the degree squared without a catalogue entry saying so.
+func TestPiExponentComposes(t *testing.T) {
+	square, err := Degree.Times(Degree)
+	if err != nil {
+		t.Fatalf("Times: %v", err)
+	}
+	if got := square.Factor().Pi; got != 2 {
+		t.Errorf("the square degree has π^%d, want π^2", got)
+	}
+
+	ratio, err := Degree.Per(Degree)
+	if err != nil {
+		t.Fatalf("Per: %v", err)
+	}
+	if got := ratio.Factor().Pi; got != 0 {
+		t.Errorf("a degree per a degree has π^%d, want π^0", got)
+	}
+
+	perDegree, err := Radian.Per(Degree)
+	if err != nil {
+		t.Fatalf("Per: %v", err)
+	}
+	if got := perDegree.Factor().Pi; got != -1 {
+		t.Errorf("a radian per a degree has π^%d, want π^-1", got)
+	}
+
+	cube, err := Degree.Pow(3)
+	if err != nil {
+		t.Fatalf("Pow: %v", err)
+	}
+	if got := cube.Factor().Pi; got != 3 {
+		t.Errorf("a degree cubed has π^%d, want π^3", got)
+	}
+
+	inverse, err := Degree.Pow(-2)
+	if err != nil {
+		t.Fatalf("Pow: %v", err)
+	}
+	if got := inverse.Factor().Pi; got != -2 {
+		t.Errorf("a degree to the −2 has π^%d, want π^-2", got)
+	}
+
+	none, err := Degree.Pow(0)
+	if err != nil {
+		t.Fatalf("Pow: %v", err)
+	}
+	if got := none.Factor().Pi; got != 0 {
+		t.Errorf("a degree to the zeroth has π^%d, want π^0", got)
+	}
+}

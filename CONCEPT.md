@@ -232,9 +232,14 @@ citation cannot be checked.
 
 **Exactness is a precondition, not a preference.** A unit whose factor is a
 rational multiple of π — the degree of arc, the gon, the oersted — has no finite
-decimal fraction and is *left out* of the catalogue rather than rounded into it.
-Shipping a rounded factor silently because the unit is popular is how a catalogue
-stops being auditable. What those units need is a symbolic factor; see section 8.
+decimal fraction, and shipping a rounded one silently because the unit is popular
+is how a catalogue stops being auditable. Such a unit is not left out and not
+rounded in: D20 gives the factor a π exponent beside the fraction, so
+`{den: "180", pi: 1}` is the degree and can be checked against the SI Brochure
+character by character. The exponents subtract on conversion, so the exactness
+above is unchanged for every conversion that stays inside the π units, and only
+one that crosses out of them puts digits in place of π — the single amendment
+this decision takes, recorded in D20 rather than hidden here.
 
 ### D5 — Dimension: 7 packed exponents, kind held separately
 
@@ -1185,7 +1190,7 @@ u, ok := catalog.Canonical(dim, kind, frequency.Quantity)
 
 It goes in the quantity package rather than in `catalog`, because that is the
 package a caller already imports for the units, and reaching a tag through
-`catalog` would pull all forty-three quantity packages in behind it. The tags
+`catalog` would pull all forty-four quantity packages in behind it. The tags
 are therefore *reserved names of this catalogue*, not of the type: `Quantity`
 stays a `string` and a caller's own catalogue declares its own constants for its
 own tags. Two catalogues in one program that spell one dimension differently are
@@ -1579,6 +1584,371 @@ the entries an unwary catalogue gets wrong:
   already refuses an entry without one, which is the check that keeps this
   package from becoming a folklore collection.
 
+
+### D20 — Symbolic factors: one π exponent beside the fraction
+
+**Status:** built. This is the decision D4 and section 6 had been pointing at
+since they refused to round a factor, and section 7 records what each part of it
+is measured by. Three things it said turned out to be wrong when it met the
+code; they are corrected in place below and marked **Correction**, as D15's
+were, because a decision that reads as if it had been right all along teaches
+nobody what the writing of it missed.
+
+D4 stores a factor as `num/den` and admits nothing else, so a unit whose factor
+is a rational multiple of π has no entry: the degree of arc, the gon, the
+oersted. They are not exotic — the degree is in Table 8 of the SI Brochure, and a
+catalogue of plane angle holding only the radian is a catalogue nobody can use
+for an angle they read off a drawing. The factor therefore gains one term:
+
+```go
+// base = (magnitude + offset) · num / den · πᵖ
+type Unit struct { /* … */ num, den *apd.Decimal; pi int8 }
+```
+
+**One constant, not a table and not an algebra.** π is the only irrational the
+catalogue needs, and that is not a close call: every candidate below is a rational
+multiple of a power of π, and no unit in NIST SP 811 or the SI Brochure needs
+`e`, a root or a logarithm. A table of named constants would cost a resolution
+rule and a comparison rule for a case that does not exist; an expression tree
+would put a computer algebra system inside a data file whose whole purpose (D4)
+is that a human can check it against a standard character by character.
+`factor: {num: "1", den: "180", pi: 1}` is still that.
+
+**What it unblocks.** With sources, in one generator run:
+
+| Unit | Factor | p |
+|---|---|---|
+| degree of arc, arcminute, arcsecond | `1/180`, `1/10800`, `1/648000` rad | 1 |
+| gon | `1/200` rad | 1 |
+| oersted | `1000/4` A·m⁻¹ | −1 |
+| parsec | `648000/1` au | −1 |
+
+The exponent is the whole extension: four of the six units are p = 1 and two are
+p = −1, and both directions have to be there, because the sign of the exponent
+decides which side of the fraction π lands on. The parsec is written against
+the astronomical unit above because that is how the IAU defines it; the
+catalogue stores every factor against the base unit of the dimension, so the
+entry is `648000 · 149597870700` metres over π, and the astronomical unit — exact
+since 2012 and a useful unit in its own right — comes with it.
+
+**The algebra is the exponent's arithmetic and nothing else.** `times` adds p,
+`byUnit` subtracts it, `Pow(n)` multiplies it by n and gets the same range check
+the dimension exponents already have, and `Pow(0)` clears it with the rest of
+the scale. `linearScale` keeps it, because dropping the offset does not touch
+the factor.
+
+**Why `Equal` may compare p separately, and why that is exact.** Two scales are
+the same iff they have the same p *and* the same fraction. That is not an
+approximation of a comparison of the products: π is transcendental, so `πᵈ` is
+rational only for `d = 0`, and two factors with different exponents can never be
+the same number. `sameRatio` stays exactly as it is, and the pointer shortcut in
+`sameScale` stays sound for the same reason it is sound today (D3).
+
+**The conversion, and the one amendment D4 takes.** The exponents subtract:
+
+```
+v' = ((v + off_f) · num_f · den_t) / (den_f · num_t) · π^(p_f − p_t) − off_t
+```
+
+Where `p_f == p_t` — degree → arcsecond, gon → degree, oersted → oersted — the
+π factor is `π⁰`, the expression is what `convert` already computes, and the
+conversion is exactly as exact as it is today. **Only a conversion that crosses
+between a π unit and a π-free one materialises π at all**, and that one rounds a
+second time: once for the quotient D4 already has, once for π at the engine's
+precision. D4 gains that sentence and keeps everything else — the catalogue
+factor is still exact, still auditable, still one division.
+
+The second rounding is bounded rather than argued away: π enters at the engine's
+precision plus a guard, so the double rounding is invisible in the last place the
+engine reports. That is a test and not a claim — every crossing conversion in the
+catalogue is computed a second time at precision + 40 and rounded down to the
+engine's precision, and the two must agree.
+
+**π enters as an enclosure, not as a value.** `internal/pi` exposes the constant
+twice, `Floor(prec)` and `Ceiling(prec)` — the same digits with the last place
+down and up. A point conversion takes either (they differ below what it reports);
+an interval bound takes the one that widens, chosen by the sign of the magnitude
+and the sign of `p_f − p_t`. This is D15's outward rule reaching one level
+further down, and it needs no new policy: `Engine.Rounding` already exists, and
+the property test in `uncertainty/rounding_test.go` runs over the whole
+catalogue, so the first π unit to enter the catalogue is policed by a test that
+is already written. Getting the direction backwards fails it in a second.
+
+**Why the constant is stored and not computed.** A computed π would have to be
+cached to be affordable, and a cache is the global mutable state D7 forbids —
+there is nowhere in this library to keep one. So the digits are a string
+constant, and their auditability is handled the way D4 handles a conversion
+factor: a test recomputes π from Machin's formula in `math/big` rationals and
+compares it to the constant digit by digit. The constant is a claim about the
+world like `101325/760`, and it carries its check.
+
+**The precision ceiling is an error, not a silent truncation.** The constant is
+finite, so an `Engine` asking for more digits than it holds minus the guard gets
+a `RangeError` naming the limit. A conversion that quietly returns fewer correct
+digits than the engine promises is the failure this library exists to prevent.
+
+**The cost, and where it falls due.** One exported signature changes:
+
+```go
+func (u Unit) Factor() (numerator, denominator *apd.Decimal)   // today
+func (u Unit) Factor() Factor                                   // Factor{Num, Den *apd.Decimal; Pi int}
+```
+
+A caller that reads `Factor()` and ignores a π exponent computes a wrong number,
+so the exponent could not be bolted on as a second getter — the compiler has to
+stop that caller. **This is why D20 was built before the API review of section 7
+closed and not after it:** the change was free in `v0.x` and would have been a
+`v2` after the freeze. `UnitDef` gained `Pi int` and the YAML a `pi:` key, both
+additive and both defaulting to zero, so no existing entry moved.
+
+The arcminute and arcsecond ship as `′` and `″` only: the ASCII `'` and `"` are
+quoting characters in the formats `parse` is embedded in (D12), and a symbol
+that has to be escaped to be written is a symbol that will be written wrong.
+`rad` stays refused for the absorbed dose (section 6), unchanged.
+
+**Correction, `°` next to `°C` is not a hazard.** This decision predicted that
+the parser would need a longest-match rule, because the degree symbol is a prefix
+of the degree Celsius and the catalogue had never held such a pair. It needs
+nothing: `parse` splits the magnitude from the unit text and then looks the whole
+text up as one key (D12), so `°` and `°C` are two entries in a map and never
+compete. The prediction was about a parser that scans, and this one does not.
+
+**Correction, the two units this decision promised and the catalogue does not
+have.** The square degree would need `deg²` as a second spelling of the degree,
+and two spellings for one unit is the ambiguity D12 exists to refuse;
+`angle.Degree.Pow(2)` builds that scale without naming it, and the exponent
+algebra is tested there instead. The gilbert would need a magnetomotive-force
+group whose canonical unit is the ampere over again, which is a question about
+D6 and not about factors. In their place the catalogue gained the astronomical
+unit, which the parsec is defined against and which is exact in its own right —
+so the batch is six units and two of them were not on the list.
+
+**Correction, `internal/pi` exposes a power and not two bounds.** The sketch
+above named `Floor(prec)` and `Ceiling(prec)`. What a conversion needs is
+`Power(n, prec, mode)`: the exponent has to be *raised* in the direction it is
+rounded, because π² computed from a rounded-down π is only a lower bound if
+every multiplication on the way rounds down too. Putting the loop inside the
+constant's package is what keeps that true; a caller multiplying two bounds
+itself would have had to know it.
+
+**What it cost.** One field on `Unit`, one on `UnitDef`, one key in the YAML, one
+exponent check in the generator, a `Factor` struct where two return values were,
+a `PrecisionError`, and `internal/pi` — the digits, one function, and the test
+that recomputes them. Everything else is the four lines where the exponent adds,
+subtracts, multiplies and compares. The conversion grew one branch, and it is the
+branch that runs only when the exponents fail to cancel.
+
+### D21 — GUM propagation: `metrology/gum`, linear terms with provenance
+
+**Status:** built. Section 8 had deferred uncertainty *propagation* since the
+beginning and D15 built only the interval half; this is the other half, a second
+layer beside `uncertainty` and not an extension of it. Section 7 records what
+each part is measured by. Six things this decision said turned out to be wrong
+or incomplete when it met the code, and they are corrected in place below and
+marked **Correction**, as D15's and D20's are.
+
+**Why not inside `uncertainty`.** The two models disagree on purpose. In the
+interval layer `x − x` is not zero and must not be, because the layer knows
+nothing about where its two operands came from and a worst-case enclosure of two
+unrelated magnitudes is what it promises. In a GUM budget `x − x` *is* zero,
+exactly, because the two are the same input and their contributions cancel. Both
+answers are right in their own model and neither is right in the other; a package
+holding both types would be a package whose name means two things, and
+`uncertainty`'s doc line exists precisely to stop a reader taking the one for the
+other. So: `metrology/gum`, a sibling. The name is jargon, and it is the jargon
+of the standard it implements (JCGM 100:2008) — a reader who does not recognise
+it is a reader who should be reading the standard before the package.
+
+Not a separate module either, and for D15's three reasons unchanged: conversion
+would be a second implementation of D4, the kind rules of D6 would be restated by
+somebody who has not read them, and `unitvet` cannot be taught a type outside
+this module.
+
+**The model.** The law of propagation of uncertainty, first order (JCGM 100 §5):
+
+```
+u_c²(y) = Σ (∂f/∂xᵢ)² u²(xᵢ) + 2 ΣΣ (∂f/∂xᵢ)(∂f/∂xⱼ) u(xᵢ, xⱼ)
+```
+
+A value therefore carries not one number but the *decomposition* that produced
+it — a sparse list of contributions, each tagged with the independent input it
+came from:
+
+```go
+package gum
+
+// Value is an estimate of a measurand together with where its uncertainty
+// came from.
+type Value struct {
+    est   metrology.Measurement
+    terms []term          // sorted by source, one entry per independent input
+}
+
+type term struct {
+    src Source            // identity of an independent input
+    c   *apd.Decimal      // (∂y/∂x)·u(x), on the estimate's interval scale
+}
+
+// Source identifies one independent input. Two values sharing a Source are
+// correlated through it, which is the whole mechanism.
+type Source struct{ /* opaque */ }
+```
+
+Correlation is then not a second mechanism: two values are correlated exactly
+where their term lists name the same source, and the cross terms fall out of the
+sum. A declared correlation between two *inputs* is handled at construction, by
+building the pair out of two independent sources — the 2×2 Cholesky factor is
+two lines — rather than by consulting a covariance matrix at combination time.
+That keeps `Value` self-contained and every operation total, which a
+matrix-on-the-side does not: `a.Add(b)` cannot look up a ρ it was never given,
+and giving it one would mean a context object threaded through every call or a
+registry, which is D7.
+
+**Contributions are spans, and the layer inherits that rather than restating
+it.** `u(x)` is a distance along a scale and never a place on it, so a term lives
+on the estimate's *interval* unit — 0.3 K beside 20 °C — which is the rule D6
+already states and `uncertainty.Symmetric` already follows. Converting a `Value`
+converts the estimate as a point and every term as a span, and `Unit.OfDecimal`
+(D15) is how a bare term becomes a measurement again. The layer needs **nothing
+new from the core**: `Engine.Rounding` and `Unit.OfDecimal` were added for D15
+and cover D21 as they stand. That is worth recording where section 7 asks
+whether those two belong in the frozen surface — a second consumer answers the
+question the first one raised.
+
+**The rounding finding, and it is the opposite of D15's.** In the interval layer
+every bound rounds outward, because the bound *is* the answer. Here the terms
+are intermediate and cancellation is the feature: round `|c|` up on both terms of
+`x − x` and the two no longer cancel, so the layer would report an uncertainty
+for a quantity that has none — the dependency problem re-introduced by the
+rounding policy that was meant to be conservative. So **terms round to nearest
+(D9) and only the final combination rounds up**, with `apd.RoundCeiling` on the
+square root. One directed rounding, at the one place where the number leaves the
+layer.
+
+**Correction, `apd` does not round a square root the way it is asked.** This
+decision assumed the mode on the context would carry, as it does for every other
+operation and as `Engine.Rounding` relies on in D15. It does not: `Sqrt` returns
+the correctly rounded nearest value under `RoundFloor`, `RoundCeiling` and
+`RoundHalfUp` alike — measured, all three give the same digits. So the direction
+is applied afterwards, as one unit in the last place and only where the root
+came back inexact. A root that is exact is left alone, which is what keeps
+u = 0.5 from being reported as 0.50000000000000000001.
+
+**Correction, one contribution is its own combination.** A value with a single
+input would otherwise be squared and rooted to get back the number it was given,
+and the round trip rounds twice — enough to turn a stated 0.3 K into 0.30000…1.
+The root of one square is the magnitude itself, so that is what is returned.
+
+**Correction, `Pow` is not repeated multiplication.** The sketch argued that
+raising a value by multiplying it by itself is exact about the dependency for
+free, which is true. What it costs is the *spelling* of the unit: the reciprocal
+that a negative power needs comes out as `1/(m·m)` where the core's own
+`Unit.Pow` says `m⁻²`, and two spellings of one scale is what D12 refuses. So
+the unit is `Unit.Pow` and the sensitivity is the n·xⁿ⁻¹ the chain rule asks
+for — with xⁿ⁻¹ falling out of the loop that raises the magnitude, so nothing is
+differentiated symbolically after all.
+
+**Constructing an input.** Type B evaluation is a handful of divisors and is
+where a budget actually starts:
+
+```go
+func Exactly(m metrology.Measurement) Value                          // u = 0, no terms
+func Standard(est, u metrology.Measurement) (Value, error)           // u given directly
+func Rectangular(est, halfWidth metrology.Measurement) (Value, error) // u = a/√3
+func Triangular(est, halfWidth metrology.Measurement) (Value, error)  // u = a/√6
+func Coverage(est, U metrology.Measurement, k int) (Value, error)     // u = U/k
+func Sample(ms []metrology.Measurement) (Value, error)                // Type A: mean, s/√n
+func Correlated(a, b Input, rho *apd.Decimal) (Value, Value, error)
+```
+
+There is deliberately **no constructor from an `uncertainty.Range`**. An interval
+states two bounds and claims no distribution; reading it as rectangular would
+invent the claim, and inventing a claim about the data is the one thing both
+layers refuse. The reverse direction exists, because it is a report and not an
+assumption.
+
+**Correction, the distributions produce an uncertainty and not a value.** The
+sketch above made every Type B evaluation a constructor of its own —
+`Rectangular(est, halfWidth)` beside `Standard(est, u)` — which multiplies the
+constructors by the distributions for no gain. What shipped factors the two
+apart: `Rectangular`, `Triangular`, `UShaped` and `FromExpanded` take a
+half-width and return the standard uncertainty behind it, and `Of` or
+`Standard` turns that into a value. Four functions and two constructors instead
+of eight constructors, and a caller can read a/√3 in the one place it is
+computed.
+
+**Operating and reporting.**
+
+```go
+func (v Value) Add(o Value) (Value, error)                  // Sub, Mul, Div, Pow, Scale, To
+func (v Value) Apply(y metrology.Measurement, p ...Partial) (Value, error)
+func (v Value) Estimate() metrology.Measurement
+func (v Value) Uncertainty() (metrology.Measurement, error) // combined standard u, interval kind
+func (v Value) Expanded(k int) (uncertainty.Range, error)   // y ± k·u, as a Range
+func (v Value) Contributions() []Contribution               // the budget table
+```
+
+`Add` and `Sub` add and subtract the term lists; `Mul` and `Div` are the first
+order of the product rule, `∂(xy)/∂x = y`; `Pow` is `n·xⁿ⁻¹`. Anything that is
+not arithmetic — a flow coefficient, a calibration polynomial, a steam table —
+goes through `Apply`, where the caller supplies the partial derivatives as
+measurements. **The library does not differentiate Go functions and will not
+pretend to:** automatic differentiation over `Measurement` is a different design,
+and a partial the caller computed and can cite beats one the library inferred.
+
+`Expanded` returning an `uncertainty.Range` is where the two layers meet: the
+budget produces the number, the interval layer already has the text form, the
+parser and the outward rounding for reporting it. `Contributions` is the table a
+practitioner actually wants — source, sensitivity, contribution, share of the
+variance — and it is a projection of the term list, not a second computation.
+
+**What stays out.** Monte Carlo evaluation (JCGM 101, GUM Supplement 1): it needs
+a random source, which is state, and floating point to be affordable, which is a
+second arithmetic — if it is ever wanted it is its own decision, not a corner of
+this one. Second-order terms. Distributions as objects. Effective degrees of
+freedom by Welch–Satterthwaite: a natural second milestone, needs a ν per source,
+and is deliberately not in the first.
+
+**Correction, the span unit is asked for, and it can be refused.** The layer
+does not decide which scale a contribution is read on; it asks the core, because
+a measurement minus itself is a span by D6 and those rules already know the
+answer. What the decision missed is that the question has no answer on every
+scale: a caller's catalogue may declare an interval unit whose quantity tag
+conflicts with its own scale's, and then the difference of two of its points is
+a magnitude on a scale nobody can name. So a `Value` carries the span unit
+resolved once, at construction, and every constructor can refuse — except
+`Exactly`, which has no contribution to express and stands the estimate's own
+scale in for the span it will never use.
+
+**Correction, the degrees of freedom are in the first version.** This decision
+put Welch-Satterthwaite in a second milestone. `Value.EffectiveFreedom`
+implements it (JCGM 100 §G.4.1), every input carries a ν — `Infinite` by
+default, n − 1 out of `Sample` — and a ν_eff past what an `int` holds is
+reported as `Infinite`, because the t-factor at that end of the table has been
+the normal one for some thousands of degrees of freedom.
+
+What is *not* here is Table G.2 itself. Turning ν_eff into a coverage factor
+needs a table of quantiles, and a table of quantiles transcribed into this
+repository would be a page of numbers with nothing to check them against — which
+is exactly what D4 refuses for a conversion factor and what the π constant of
+D20 avoids by carrying its own recomputation. The caller reads the standard's
+table and passes the factor to `Expanded`.
+
+**`unitvet` learns a third receiver type**, as D15 predicted the second would
+cost. The rule bodies do not change — a `Value`'s dimension, kind and quantity
+are its estimate's — and three constructors are recognised without a receiver,
+exactly as `uncertainty.Of`, `Between` and `Symmetric` are: `Exactly`,
+`Standard` and `Apply`, each of which takes its estimate as an argument the
+pass can resolve. `Standard` is also *checked*, by the rule `Symmetric` already
+had: a standard uncertainty is a span along a scale and never a point on it.
+
+**Correction, three constructors are silent and that is the design.** `Of` takes
+an `Input` struct, `Sample` a slice and `Correlated` a pair of structs, and a
+field of a composite literal is the container read D13 does not follow. A value
+built by one of them resolves to nothing and the pass says nothing about it. The
+alternative — teaching the checker to track stores into a local struct — is the
+guessing D13 forbids, and the positional `Standard` exists partly so that the
+common case stays provable.
 ---
 
 ## 4. The API
@@ -1670,6 +2040,17 @@ agree, err  := r.Overlaps(specified)           // so a conversion never
                                                // manufactures a disagreement
 text, ok := r.PlusMinus()                      // the display form, and whether
                                                // it says exactly what r says
+
+// --- An uncertainty budget: the propagation layer (D21) ------
+
+l, err := gum.Standard(length.Metre.Of(100),   // an estimate and its standard
+    length.Metre.Of(0.1))                      // uncertainty, as measurements
+area, err := l.Mul(w)                          // ∂(lw)/∂l = w, and the merge
+zero, err := l.Sub(l)                          // 0 m ± 0 m: one input, cancelled
+u, err    := area.Uncertainty()                // the combination, rounded up
+rows      := area.Contributions()              // the budget, one row per input
+nu, err   := area.EffectiveFreedom()           // Welch-Satterthwaite (§G.4.1)
+band, err := area.Expanded(2)                  // handed back as a Range (D15)
 ```
 
 ---
@@ -1683,8 +2064,10 @@ text, ok := r.PlusMinus()                      // the display form, and whether
 | `symbol` | SI prefixes, product, quotient and the special forms, spellings |
 | `parse` | reading the text form, resolving unit expressions, `parse.Text` |
 | `uncertainty` | the interval layer of D15 — `Range`, its arithmetic with outward-rounding bounds, its text form, its parser and `uncertainty.Text` |
+| `gum` | the propagation layer of D21 — `Value`, the contributions it carries, the Type A and Type B evaluations, the budget and its degrees of freedom |
 | `catalog` | the YAML source, the generated index, and the lookups over it |
 | `unitvet`, `cmd/unitvet` | the static dimension checker of D13 |
+| `internal/pi` | the digits of π, as an enclosure, for the crossing conversion of D20 |
 | `internal/superscript` | superscript digits for both stringers, and reading them back |
 | `internal/decimaltext` | the shape of a decimal, for the core and the parser |
 | `tools/catgen` | the generator of D8 |
@@ -1729,7 +2112,7 @@ it with `GOPROXY=off` and a cold module cache would otherwise fail the run.
 
 ## 6. The catalogue
 
-The catalogue is two files. `catalog/catalog.yaml` holds **82 units across 43
+The catalogue is two files. `catalog/catalog.yaml` holds **90 units across 44
 quantity packages**: all seven SI base units, all twenty-two named derived
 units, and the non-SI units of NIST SP 811 that process engineering uses.
 `catalog/customary.yaml` holds **14 customary units in three packages** grouped
@@ -1746,6 +2129,7 @@ whichever file each half is written in.
 | Process-engineering non-SI | bar, torr, mmHg, mmH₂O, atm, l and l/min, m³/h, kWh, ppm and ppb, °F, t, min, h, d |
 | CGS and other legacy units | dyne, erg, poise, stokes, gauss, maxwell, curie, rem, calorie, electronvolt, ångström, barn, are, hectare |
 | Dimensionless | ratio, plane angle, solid angle — separated by the quantity tag of D6 |
+| Defined through π (D20) | degree, arcminute, arcsecond, gon; the oersted with the ampere per metre; the parsec with the astronomical unit |
 | Customary (`units/customary`, D19) | in, ft, yd, mi, lb, oz, lbf, psi — every one exact by the 1959 agreement |
 | Customary, by system | `us` and `imperial`: galUS/galImp, flozUS/flozImp, tonUS/tonImp — the bare `gal` names nothing |
 
@@ -1758,9 +2142,14 @@ torr stored as 133.32236842105263 goes wrong in the seventeenth.
 
 **What the catalogue deliberately does not contain.**
 
-- **Units defined through π.** The degree of arc is π/180 radians, the oersted is
-  1000/4π A·m⁻¹. Neither has a finite decimal fraction, and D4 does not admit a
-  rounded one. They wait for symbolic factors (section 8).
+- **The square degree and the gilbert**, which are the two π units D20 named and
+  the catalogue does not have. The square degree would need a second spelling of
+  the degree — it is written `deg²` and never `°²` — and a catalogue with two
+  spellings for one unit is the ambiguity D12 refuses; `angle.Degree.Pow(2)`
+  builds the scale without naming it. The gilbert would need a
+  magnetomotive-force group whose canonical unit is the ampere again, which is a
+  modelling question about D6 and not a missing factor. Both wait, and neither
+  waits for arithmetic.
 - **The absorbed-dose rad.** Its symbol is `rad`, which is the radian. The
   collision is real, it is in the standards, and the generator is right to refuse
   it. The rem is present; the CGS dose unit waits for a symbol namespace.
@@ -1790,6 +2179,8 @@ Everything the decisions describe is implemented and enforced:
 | Text form: writing, `parse`, JSON, SQL | complete; the round-trip property holds across the whole catalogue and the parser is fuzzed against it |
 | `unitvet` | complete; the corpus asserts the reported and the silent cases alike, and the pass runs clean over this repository, tests and examples included |
 | Coverage gate | 100 % of hand-written statements, enforced in CI, `COVERAGE_EXCEPTIONS.md` empty |
+| Symbolic factors (D20) | complete; the constant is checked against Machin's formula, every crossing conversion in the catalogue is checked against the same conversion at sixty digits, the four sign combinations of a directed bound are asserted case by case, and the property test of D15 runs over the π units as it does over the rest |
+| GUM propagation, `metrology/gum` (D21) | complete; `x − x` and `x / x` are asserted to have no uncertainty at all, the product rule and the four correlation coefficients are checked against numbers computed by hand, a worked budget is a runnable example, the aliasing guard of D3 covers a value at 200 digits, and the `unitvet` corpus asserts the reported and the silent cases over values as it does over ranges |
 | The `int64` fast path (D17) | **decided, not built.** It is additive and invisible in the API, so it does not gate `v1.0.0`; what D17 fixes is that there is no type parameter and no facade to build it behind |
 | `uncertainty` (D15) | complete; a conversion is asserted over the whole catalogue never to narrow a range and never to pull two overlapping ranges apart, the four-corner table of `Mul` and the even-power case of `Pow` are tested case by case, the aliasing guard of D3 covers both bounds at 200 digits, `FuzzRange` holds the text form to a fixed point, and the `unitvet` corpus asserts the reported and the silent cases over ranges as it does over measurements |
 
@@ -1833,12 +2224,27 @@ was:
   `Engine` is unchanged, and `OfDecimal` is the counterpart of a `Decimal` that
   was already exported. But `Rounding` is a second rounding policy in a library
   that had exactly one, and `OfDecimal` widens the door into `Measurement` from
-  two constructors to three. The review should see both rather than inherit them
-- whether `uncertainty.Range` ships inside `v1.0.0` or behind it. The layer now
-  exists and is the first serious consumer of the core, which is what the
-  question was waiting for. What it argues about is `Mid` and `Width` returning
-  errors, `PlusMinus` returning `(string, bool)`, and whether `uncertainty` gets
-  its own `Engine` or borrows the core's
+  two constructors to three. The review should see both rather than inherit them.
+  What has changed since the question was written is that both have a second
+  consumer: D21 needs exactly these two and nothing else, and D20 needs
+  `Rounding` for the direction a π factor moves a bound in. A hook two layers
+  ask for is a hook, not an accident
+- ~~the shape of `Unit.Factor`~~ — **settled by building D20 first.** The getter
+  returns a `Factor` struct carrying the π exponent beside the fraction, because
+  a caller reading the fraction alone computes a wrong number and the compiler
+  has to stop that caller. This was the one item whose *order* was decided rather
+  than open, and it is done: the change was free in `v0.x` and would have been a
+  `v2` after the freeze. What the review still sees is the struct itself
+- whether `uncertainty.Range` and `gum.Value` ship inside `v1.0.0` or behind it.
+  Both layers now exist and are the first serious consumers of the core, which is
+  what the question was waiting for. What the interval layer argues about is
+  `Mid` and `Width` returning errors, `PlusMinus` returning `(string, bool)`, and
+  whether it gets its own `Engine` or borrows the core's. What the propagation
+  layer argues about is narrower, because it added nothing to the core: whether
+  `Input` as a struct and `Standard` as a positional pair are both wanted,
+  whether `Apply` is the right shape for a model the package cannot
+  differentiate, and whether `EffectiveFreedom` belongs in a package that ships
+  no table to use it with
 - ~~`O1`, whether `imperial` is a subpackage or a module~~ — settled as D19: a
   subpackage, `units/customary`, from a catalogue file of its own
 - ~~`O3`, what covers the units the two customary systems disagree about~~ —
@@ -1859,9 +2265,9 @@ additive, opt-in, and can ship a new version independently.
 | Topic | Rationale |
 |---|---|
 | Fractional exponents | Occur in correlations (e.g. `m·s⁻⁰·⁵`) but require rationals instead of `int8` in the dimension word. The eight reserved bits from D5 keep that door open. |
-| Units defined through π | The degree of arc, the gon, the oersted. Their factors are rational multiples of π and have no finite decimal form, so D4 cannot store them exactly. Needs a symbolic factor — a fraction plus a π exponent — which changes the shape of every conversion. Left out of the catalogue rather than rounded into it. |
+| ~~Units defined through π~~ | **Built as D20.** The factor carries one π exponent beside the fraction, and the degree, the arcminute, the arcsecond, the gon, the oersted and the parsec are catalogue entries that are still exact and still checkable against their source. What stays deferred is everything a *general* symbolic factor would be: a table of constants, an expression tree, anything that is not one integer exponent of one transcendental. |
 | Quantities sharing a dimension *and* a symbol | Thermal diffusivity and a diffusion coefficient print as `m²/s`, like kinematic viscosity. The quantity tag of D6 separates them in code, but the text form of D12 has to read back to one unit. Needs a text form that carries the quantity. |
-| Measurement uncertainty — propagation | Still deferred, and the reason is unchanged: it is a large topic of its own with its own error propagation, and it belongs on top of the core rather than in it. What has since been decided and built is only the *interval* half — `metrology/uncertainty`, D15: worst-case bounds, with the dependency problem and with every bound rounding outward. Quadrature combination, correlated quantities and coverage factors are none of it and stay here. |
+| ~~Measurement uncertainty — propagation~~ | **Built as D21**, and as a layer on top of the core exactly as this entry always said it would be: `metrology/gum`, first-order propagation over a term list that remembers which independent input each contribution came from, so correlated inputs and `x − x` both come out right. The *interval* half is D15. What remains deferred is Monte Carlo evaluation (JCGM 101), second-order terms, distributions as objects, and the t-table that turns effective degrees of freedom into a coverage factor — see D21 for why each. |
 | Non-linear scales | dB, pH, degrees Baumé. They do not fit the factor/offset model of D4 and need their own abstraction. |
 | Localised output | Decimal comma, unit names per language. Maintainable only once the catalogue is settled. |
 | Vector and tensor quantities | A different subject. A library for scalar quantities stays one. |
@@ -1874,6 +2280,7 @@ additive, opt-in, and can ship a new version independently.
 |---|---|
 | The aliasing invariant breaks unnoticed | It is the one rule whose violation causes silent data corruption. Hence the dedicated guard test of D3, using values above 38 digits — below that threshold apd/v3 masks the bug. |
 | Decimal arithmetic is too slow | Measured, and the measurement is in the tree: `BenchmarkConvert` puts a conversion three orders of magnitude above `float64` (D9). Irrelevant for design calculations and reporting, not irrelevant for a loop over millions of sensor readings — which is why README.md names the boundary rather than leaving a user to find it, and why `BenchmarkKernel` measures that boundary as faster than any arithmetic swapped in behind it (D17). If it binds, the escape is a fast path for values that fit losslessly in `int64`, which D17 measures rather than proposes: nine times on an accumulation, no allocations, and the same answer as the slow path — not a return to `float64`, which D17 measures as slower than the boundary it would replace and as a different arithmetic besides. |
+| A π conversion rounds twice (D20) | The one place the exactness of D4 does not reach. Held down two ways: the exponents cancel in every conversion that stays inside the π units, so only a crossing conversion materialises π at all; and where one does, π enters at the engine's precision plus ten guard digits, with a test recomputing every crossing conversion at sixty digits and requiring the same twenty. The constant itself is checked against a Machin recomputation rather than trusted, and a precision it cannot serve is an error rather than a truncation. |
 | Kind semantics proliferate | Every new kind needs a justification in the catalogue. No dimension collision and no affinity, no kind. |
 | `unitvet` produces a false positive | The one failure mode that kills the tool, because users disable it and then get nothing. Every rule must be provable before it reports; `analysistest` asserts the silent cases as explicitly as the reported ones. Prefer missing a real bug over inventing one. |
 | The dropped-tag rule of D16 becomes a false positive | It is the one diagnostic that predicts no run-time error, so it is the one rule whose noise would be indistinguishable from a bug in the checker. Held down by the two limits D16 states — provenance dies with the dimension, and two disagreeing tags leave none — both asserted in the silent half of the corpus. If it ever reports a deliberate reinterpretation more often than a mistake, the rule goes, not the marker that silences it. |

@@ -73,7 +73,7 @@ and the catalogue index:
   source: NIST SP 811 (2008), Appendix B.8
 ```
 
-It holds **82 units across 43 quantity packages**: all seven SI base units, all
+It holds **90 units across 44 quantity packages**: all seven SI base units, all
 twenty-two named derived units, the CGS and legacy units that still appear in
 data sheets, and the non-SI units of NIST SP 811 that process engineering uses.
 A second file adds **14 customary units** in `units/customary` — the inch, foot,
@@ -89,11 +89,13 @@ catalogue with a missing source, a duplicate symbol, two units claiming the same
 dimension and quantity, or a factor that is not a number — at generation time, so
 a defective catalogue is a failed build rather than a panic in production.
 
-Every factor is **exact**, and units that cannot be exact are left out rather
-than rounded in: the degree of arc is π/180 radians, which has no finite decimal
-fraction, so it waits for symbolic factors instead of shipping as
-`0.017453292519943295`. A golden test checks the whole catalogue against the
-factors printed in NIST SP 811.
+Every factor is **exact**, and a factor that is not rational carries its
+irrational part symbolically rather than rounded: the degree of arc is stored as
+π/180 and not as `0.017453292519943295` (D20). The exponents of π subtract on
+conversion, so a degree is exactly 3600 arcseconds at any precision, and only a
+conversion that crosses out of the π units — a degree into a radian — puts digits
+in place of π. A golden test checks the whole catalogue against the factors
+printed in NIST SP 811.
 
 For the cases where the unit is not known at compile time — a symbol read from a
 configuration file, or a computed dimension that needs a unit to be expressed
@@ -181,8 +183,38 @@ This is interval arithmetic and not an uncertainty budget. It has the dependency
 problem — `x − x` is not zero, `x / x` is not one, and a formula naming a
 variable twice over-widens. For checking a number that is conservative and safe;
 as a GUM-style uncertainty budget it is wrong, and the package says so on its
-first line. Quadrature combination, correlated quantities and coverage factors
-are deliberately not here.
+first line. The budget is the next section, and it is a different package on
+purpose.
+
+## An uncertainty budget, the way the GUM does one
+
+`gum.Value` carries an estimate and the decomposition that produced its
+uncertainty: one contribution per independent input, each tagged with the input
+it came from. Combining two values applies the law of propagation of uncertainty
+to first order (JCGM 100 §5), and correlation is not a matrix on the side — two
+values are correlated exactly where their contributions name the same input:
+
+```go
+l, _ := gum.Standard(length.Metre.Of(100), length.Metre.Of(0.1))
+w, _ := gum.Standard(length.Metre.Of(50), length.Metre.Of(0.05))
+
+area, _ := l.Mul(w)          // 5000 m² ± 7.0710678118654752441 m²
+zero, _ := l.Sub(l)          // 0 m ± 0 m
+```
+
+`x − x` is exactly zero here and `x / x` exactly one, which is the whole reason
+this is a second package rather than a second type in the first one: the two
+models disagree about the same subtraction on purpose, and each is right in its
+own. A budget also reports itself — `Contributions` is the table, `Sample` is a
+Type A evaluation, `Rectangular` and its neighbours are the Type B divisors,
+`EffectiveFreedom` is Welch-Satterthwaite, and `Expanded(k)` hands the result
+back as an `uncertainty.Range` so the interval layer can write it.
+
+What is deliberately not there: Monte Carlo evaluation, automatic
+differentiation — `Apply` takes the partial derivatives from the caller, who can
+cite them — and the t-table that turns effective degrees of freedom into a
+coverage factor, because a page of quantiles with nothing to check it against is
+what this library refuses everywhere else.
 
 ## Dimensions are checked before the code runs
 

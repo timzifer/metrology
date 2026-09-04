@@ -107,7 +107,7 @@ func (c *checker) coreCall(call *ssa.CallCommon) (owner owned, name string, ok b
 	}
 	receiver := callee.Signature.Recv()
 	if receiver == nil {
-		return c.rangeConstructor(callee)
+		return c.layerConstructor(callee)
 	}
 	named, isNamed := types.Unalias(receiver.Type()).(*types.Named)
 	if !isNamed {
@@ -122,19 +122,23 @@ func (c *checker) coreCall(call *ssa.CallCommon) (owner owned, name string, ok b
 	return found, callee.Name(), true
 }
 
-// rangeConstructor reports whether a receiverless call is one of the interval
-// layer's constructors.
+// layerConstructor reports whether a receiverless call is one of the
+// constructors of the interval layer or of the propagation layer.
 //
 // The pass reaches the package by name here rather than by type identity,
 // because a function has no receiver to take a type off. That is sound for the
 // same reason the type map is: within one pass there is one package per import
 // path, and the path is the one this pass was written against.
-func (c *checker) rangeConstructor(callee *ssa.Function) (owned, string, bool) {
+func (c *checker) layerConstructor(callee *ssa.Function) (owned, string, bool) {
 	pkg := callee.Pkg
-	if pkg == nil || pkg.Pkg.Path() != rangePath || !rangeConstructors[callee.Name()] {
+	if pkg == nil {
 		return owned{}, "", false
 	}
-	return owned{owner: rangePath, name: "Range"}, callee.Name(), true
+	path := pkg.Pkg.Path()
+	if !layerConstructors[path][callee.Name()] {
+		return owned{}, "", false
+	}
+	return owned{owner: path, name: layerTypes[path]}, callee.Name(), true
 }
 
 // coreResult reports the scale a call to one of the library's own methods
@@ -158,6 +162,25 @@ func (c *checker) coreResult(owner owned, name string, call *ssa.CallCommon) (sc
 	case "Lo", "Hi", "Mid":
 		// A bound of a range, and its midpoint, are on the range's own scale.
 		return c.resolve(last(call))
+
+	case "Exactly", "Estimate":
+		// A value without uncertainty is read on the scale of the measurement
+		// it was built from, and the estimate of a value is read on the scale
+		// of the value (D21).
+		return c.resolve(last(call))
+
+	case "Standard", "Apply":
+		// The estimate comes first and the uncertainty — or the list of
+		// partial derivatives — after it, so the scale is the second-to-last
+		// argument whether or not an Engine is carrying the call.
+		return c.resolve(raised(call))
+
+	case "Uncertainty":
+		// A combined uncertainty is a span, and for a value on an absolute
+		// scale it is read on the interval unit that scale declares — which
+		// unit that is, is not something this table records. Same silence as
+		// the width of a range, and for the same reason.
+		return c.spanOf(call)
 
 	case "Between", "Symmetric":
 		return c.ranged(name, call)

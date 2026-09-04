@@ -108,6 +108,9 @@ func emitUnit(b *bytes.Buffer, u unitSpec, q quantity, byID map[string]unitSpec)
 	if u.Factor.Den != "" {
 		fmt.Fprintf(b, "Denominator: %q,\n", u.Factor.Den)
 	}
+	if u.Factor.Pi != 0 {
+		fmt.Fprintf(b, "Pi: %d,\n", u.Factor.Pi)
+	}
 	if u.Offset != "" {
 		fmt.Fprintf(b, "Offset: %q,\n", u.Offset)
 	}

@@ -48,6 +48,10 @@ var (
 	// [RangeError].
 	ErrRange = errors.New("value out of range for the target type")
 
+	// ErrPrecision reports a conversion that would need more digits of π than
+	// this library holds (D20). See [PrecisionError].
+	ErrPrecision = errors.New("precision beyond the digits of π")
+
 	// ErrNoScale reports the zero [Unit], which no constructor produced: it
 	// carries no factor and no offset, so there is nothing to read a magnitude
 	// on. It is what a caller who ignored an error and went on computing gets,
@@ -163,3 +167,24 @@ func (e *RangeError) Error() string {
 
 // Is reports that every RangeError matches [ErrRange].
 func (e *RangeError) Is(target error) bool { return target == ErrRange }
+
+// PrecisionError reports an [Engine] asking for more precision than a π factor
+// can be served at (D20).
+//
+// The digits of π are a constant, and a constant is finite. Serving the request
+// with the digits that exist would return fewer correct digits than the engine
+// promises without saying so, which is the failure this library is built to
+// prevent — so the conversion fails instead, and says where the limit is.
+type PrecisionError struct {
+	Op        string // the operation that failed: "convert"
+	Requested uint32 // the engine's precision
+	Max       uint32 // the largest precision a π factor can be served at
+}
+
+func (e *PrecisionError) Error() string {
+	return fmt.Sprintf("metrology: %s: %d significant digits needs more of π than this library holds; the limit is %d",
+		e.Op, e.Requested, e.Max)
+}
+
+// Is reports that every PrecisionError matches [ErrPrecision].
+func (e *PrecisionError) Is(target error) bool { return target == ErrPrecision }

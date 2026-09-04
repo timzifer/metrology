@@ -55,6 +55,8 @@ func (u Unit) Per(other Unit) (Unit, error) {
 //
 // The factor is raised exactly, by repeated multiplication rather than by a
 // logarithm: (101325/760)² is a fraction of two integers and stays one (D4).
+// A π exponent is multiplied by n for the same reason and with the same
+// exactness — the square degree is the degree squared (D20).
 // As with [Unit.Times] the result carries neither kind nor quantity.
 func (u Unit) Pow(n int) (Unit, error) {
 	if !u.hasScale() {
@@ -90,6 +92,7 @@ func (u Unit) Pow(n int) (Unit, error) {
 		sym:    u.sym.Pow(n),
 		num:    num,
 		den:    den,
+		pi:     int8(int(u.pi) * n),
 		offset: apd.New(0, 0),
 	}, nil
 }

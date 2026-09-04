@@ -89,8 +89,12 @@ func sameScale(a, b metrology.Unit) bool {
 	if a.String() != b.String() || a.Offset().Cmp(b.Offset()) != 0 {
 		return false
 	}
-	aNum, aDen := a.Factor()
-	bNum, bDen := b.Factor()
+	af, bf := a.Factor(), b.Factor()
+	if af.Pi != bf.Pi {
+		return false
+	}
+	aNum, aDen := af.Num, af.Den
+	bNum, bDen := bf.Num, bf.Den
 	var left, right apd.Decimal
 	ctx := apd.BaseContext
 	ctx.Precision = 0

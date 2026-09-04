@@ -31,6 +31,9 @@ func TestErrorMessages(t *testing.T) {
 		{"a range error names the value and the type",
 			&metrology.RangeError{Op: "In", Value: "300", Type: "int8"},
 			"metrology: In: 300 does not fit int8"},
+		{"a precision error names the request and the limit",
+			&metrology.PrecisionError{Op: "convert", Requested: 1200, Max: 990},
+			"metrology: convert: 1200 significant digits needs more of π than this library holds; the limit is 990"},
 		// The zero Unit renders as the empty string, so this is the one message
 		// that names no operand: quoting it would read "expected , got ".
 		{"a no-scale error names the operation and the remedy",
@@ -59,6 +62,7 @@ func TestErrorClasses(t *testing.T) {
 		{"kind", &metrology.KindError{}, metrology.ErrKind, metrology.ErrDimension},
 		{"syntax", &metrology.SyntaxError{}, metrology.ErrSyntax, metrology.ErrRange},
 		{"range", &metrology.RangeError{}, metrology.ErrRange, metrology.ErrSyntax},
+		{"precision", &metrology.PrecisionError{}, metrology.ErrPrecision, metrology.ErrRange},
 		{"no scale", &metrology.NoScaleError{}, metrology.ErrNoScale, metrology.ErrDimension},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
