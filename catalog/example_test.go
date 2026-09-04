@@ -5,6 +5,7 @@ import (
 
 	"github.com/timzifer/metrology"
 	"github.com/timzifer/metrology/catalog"
+	"github.com/timzifer/metrology/units/angle"
 	"github.com/timzifer/metrology/units/area"
 	"github.com/timzifer/metrology/units/force"
 	"github.com/timzifer/metrology/units/frequency"
@@ -62,7 +63,7 @@ func ExampleBySymbol_kind() {
 
 func ExampleUnits() {
 	fmt.Println(len(catalog.Units()), "units in the catalogue")
-	// Output: 96 units in the catalogue
+	// Output: 104 units in the catalogue
 }
 
 func ExampleCanonical_quantity() {
@@ -87,4 +88,20 @@ func Example_quantityPackages() {
 	t, err := temperature.Celsius.Of(20).To(temperature.Fahrenheit)
 	fmt.Println(t, err)
 	// Output: 68 °F <nil>
+}
+
+// A unit defined through π carries the exponent beside its fraction rather than
+// a rounded decimal (D20). Between two such units the exponents cancel and
+// nothing rounds at all; a conversion that crosses out of them is the one place
+// π becomes digits.
+func Example_piFactors() {
+	arcseconds, _ := angle.Degree.Of(1).To(angle.Arcsecond)
+	fmt.Println(arcseconds)
+
+	radians, _ := angle.Degree.Of(180).To(angle.Radian)
+	fmt.Println(radians)
+
+	// Output:
+	// 3600 ″
+	// 3.1415926535897932385 rad
 }

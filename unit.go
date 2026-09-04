@@ -1,6 +1,8 @@
 package metrology
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/timzifer/metrology/dimension"
 	"github.com/timzifer/metrology/symbol"
@@ -14,14 +16,18 @@ import (
 // never written to, so copying a Unit — which happens on every Measurement
 // copy — shares them safely.
 //
-// The relation to the base unit is an exact fraction plus an offset (D4):
+// The relation to the base unit is an exact fraction plus an offset (D4), and
+// a power of π where the definition has one (D20):
 //
-//	base = (magnitude + offset) · numerator / denominator
+//	base = (magnitude + offset) · numerator / denominator · πᵖ
 //
-// stored as three decimals rather than one pre-divided factor. 101325/760 is
-// the definition of the torr and can be checked against the SI Brochure
-// character by character; 133.32236842105263 is an approximation of it that
-// rounds a second time on every conversion.
+// stored as three decimals and a small exponent rather than one pre-divided
+// factor. 101325/760 is the definition of the torr and can be checked against
+// the SI Brochure character by character; 133.32236842105263 is an
+// approximation of it that rounds a second time on every conversion. The degree
+// of arc is π/180 radians for the same reason: 0.017453292519943295 is not what
+// the SI Brochure says, and every conversion out of it would carry a rounding
+// that the definition does not have.
 type Unit struct {
 	dim      dimension.Dimension
 	kind     Kind
@@ -30,6 +36,10 @@ type Unit struct {
 	num      *apd.Decimal
 	den      *apd.Decimal
 	offset   *apd.Decimal
+
+	// pi is the exponent of π in the factor (D20). Zero for every unit whose
+	// definition is rational, which is all but a handful of them.
+	pi int8
 
 	// interval is the unit a difference of two absolute magnitudes is
 	// expressed in: 25 °C − 20 °C is 5 K, not 5 °C. Optional; without it the
@@ -64,6 +74,15 @@ type UnitDef struct {
 	Numerator   string
 	Denominator string
 
+	// Pi is the exponent of π in the factor (D20): 1 for the degree of arc,
+	// which is π/180 radians, −1 for the oersted, 2 for the square degree.
+	// Zero — the usual case — means the factor is the fraction alone.
+	//
+	// It is a separate field rather than a rounded decimal in Numerator
+	// because a rounded π is a factor nobody can check against a standard,
+	// which is what D4 exists to prevent.
+	Pi int
+
 	// Offset is added to a magnitude before the factor is applied. Empty
 	// means 0. Only an [Absolute] unit may carry one.
 	Offset string
@@ -91,6 +110,11 @@ func NewUnit(def UnitDef) (Unit, error) {
 	if num.Sign() == 0 || den.Sign() == 0 {
 		return Unit{}, ErrZeroFactor
 	}
+	if def.Pi < -MaxPower || def.Pi > MaxPower {
+		return Unit{}, &RangeError{
+			Op: "NewUnit", Value: strconv.Itoa(def.Pi), Type: "a π exponent",
+		}
+	}
 	if offset.Sign() != 0 && def.Kind != Absolute {
 		return Unit{}, ErrOffsetKind
 	}
@@ -109,6 +133,7 @@ func NewUnit(def UnitDef) (Unit, error) {
 		sym:      def.Symbol,
 		num:      num,
 		den:      den,
+		pi:       int8(def.Pi),
 		offset:   offset,
 		interval: def.Interval,
 	}, nil
@@ -153,10 +178,25 @@ func (u Unit) Symbol() symbol.Symbol { return u.sym }
 // String renders the unit's symbol without a prefix.
 func (u Unit) String() string { return u.sym.String() }
 
-// Factor returns the exact fraction relating this unit to the base unit of its
+// Factor is the exact relation between a unit and the base unit of its
+// dimension: a fraction, and the exponent of π where the definition has one
+// (D4, D20).
+//
+//	base = (magnitude + offset) · Num / Den · π^Pi
+type Factor struct {
+	// Num and Den are the fraction, never pre-divided.
+	Num, Den *apd.Decimal
+
+	// Pi is the exponent of π, and zero for all but a handful of units.
+	// Ignoring it computes a wrong number, which is why it travels with the
+	// fraction in one value rather than beside it in a second getter.
+	Pi int
+}
+
+// Factor returns the exact relation between this unit and the base unit of its
 // dimension. The decimals are copies: a unit never hands out its own (D3).
-func (u Unit) Factor() (numerator, denominator *apd.Decimal) {
-	return copyDecimal(u.num), copyDecimal(u.den)
+func (u Unit) Factor() Factor {
+	return Factor{Num: copyDecimal(u.num), Den: copyDecimal(u.den), Pi: int(u.pi)}
 }
 
 // Offset returns the value added to a magnitude before the factor is applied,
@@ -176,6 +216,9 @@ func (u Unit) IntervalUnit() (Unit, bool) {
 // kind, same quantity, same symbol, and the same exact factor and offset.
 //
 // The fraction is compared as a value, not digit by digit, so 1/2 equals 5/10.
+// The π exponent is compared as itself, and that is exact rather than a
+// shortcut: π is transcendental, so πᵈ is rational only for d = 0 and two
+// factors with different exponents can never be the same number (D20).
 func (u Unit) Equal(other Unit) bool {
 	return u.dim == other.dim &&
 		u.kind == other.kind &&
@@ -199,6 +242,9 @@ func (u Unit) Equal(other Unit) bool {
 // same number for as long as both exist, not just at the instant of the
 // comparison. Without D3 this would be a cache with no invalidation.
 func sameScale(u, other Unit) bool {
+	if u.pi != other.pi {
+		return false
+	}
 	if u.num == other.num && u.den == other.den && u.offset == other.offset {
 		return true
 	}
@@ -237,6 +283,7 @@ func (u Unit) times(other Unit) Unit {
 		sym:    symbol.Product(u.sym, other.sym),
 		num:    mulExact(u.num, other.num),
 		den:    mulExact(u.den, other.den),
+		pi:     u.pi + other.pi, // D20: the exponents add, like the dimensions
 		offset: apd.New(0, 0),
 	}
 }
@@ -247,6 +294,7 @@ func (u Unit) byUnit(other Unit) Unit {
 		sym:    symbol.Quotient(u.sym, other.sym),
 		num:    mulExact(u.num, other.den),
 		den:    mulExact(u.den, other.num),
+		pi:     u.pi - other.pi,
 		offset: apd.New(0, 0),
 	}
 }

@@ -13,23 +13,47 @@ dimensional analysis, one package per quantity. Module path
 `github.com/timzifer/metrology`, minimum Go 1.27.
 
 **The library is complete for its stated scope.** The core computes, the
-catalogue holds 82 units across 43 quantity packages, plus 14 customary units in
+catalogue holds 90 units across 44 quantity packages, plus 14 customary units in
 `units/customary` (D19) — all seven SI base units,
 all twenty-two named derived units, the CGS and legacy units, and the non-SI
 units of NIST SP 811 that process engineering uses — the text form of D12 reads
 and writes (`metrology` writes, `parse` reads), `uncertainty` carries bounds
-instead of a point (D15), and `unitvet` checks dimensions statically per D13
-over both. What remains before `v1.0.0` is the deliberate API review of
+instead of a point (D15), `gum` carries an uncertainty budget with the
+provenance of every contribution (D21), and `unitvet` checks dimensions
+statically per D13 over all three. What remains before `v1.0.0` is the
+deliberate API review of
 section 7 of `CONCEPT.md`; until then the module is `v0.x` and the API may
 change. Section 7 also records what is complete and what each subsystem is
 measured by.
 
 `metrology/uncertainty` is the interval layer of D15 — `Range`, a magnitude
 known only to lie between two bounds. Read D15 before touching it. Uncertainty
-*propagation* — quadrature, correlations, coverage factors — stays deferred in
-section 8 and is not what this is: it is interval arithmetic, it has the
-dependency problem, and the package doc says so on its first line because a
-reader who takes it for a GUM implementation gets numbers that look right.
+*propagation* — quadrature, correlations, coverage factors — is not what this
+is: it is interval arithmetic, it has the dependency problem, and the package doc
+says so on its first line because a reader who takes it for a GUM implementation
+gets numbers that look right.
+
+`metrology/gum` is the propagation layer of D21 — the GUM's own model, and a
+sibling package rather than a second type in `uncertainty`, because the two
+disagree about `x − x` on purpose: in an interval it is not zero and must not
+be, in a budget it is zero exactly. Read D21 before touching it. Three rules
+carry the package. **A `Value` holds one contribution per independent input,
+identified by a `Source`** — correlation is shared provenance and nothing else,
+and a declared correlation is decomposed into independent inputs when the values
+are built, so no covariance matrix is consulted at combination time and no
+operation needs a context object (D7). **Contributions round to nearest and only
+the combined uncertainty rounds up** — the opposite of D15's rule, and for a
+reason: rounding a contribution outward would leave `x − x` with an uncertainty
+it does not have, and cancellation is the property the layer exists for. **The
+package computes exactly one thing for itself, the square root**, because the
+core has none; everything else goes through the core so that D9 stays the single
+rounding policy. `apd` ignores the rounding mode on a square root — measured —
+so the upward direction is applied afterwards as one unit in the last place.
+
+There is no table of t-factors in `gum`, and adding one is not an improvement:
+`EffectiveFreedom` gives ν_eff, the standard's Table G.2 gives k, and a page of
+quantiles transcribed here would be numbers with nothing to check them against —
+the thing D4 refuses for a conversion factor.
 
 The generated quantity packages live under `units/` (D18) —
 `units/pressure`, `units/temperature`. The eight hand-written packages stay at
@@ -119,7 +143,7 @@ and hopes.
 generated it (D16).** `Quantity` stays a `string` so a caller can have tags of
 its own, but this module's tags are declared as constants in the packages that
 own them. Do not reintroduce string literals for them, and do not move the
-constants into `catalog` — that would pull all forty-three quantity packages in
+constants into `catalog` — that would pull all forty-four quantity packages in
 behind a tag comparison.
 
 **An interval bound rounds outward, always (D15).** `Lo` is computed with
@@ -145,9 +169,15 @@ hertz and the becquerel are both T⁻¹. The empty quantity is compatible with
 everything, because multiplication and division drop the tag and every computed
 magnitude is therefore untagged. Do not merge the two back into one value.
 
-**Every catalogue factor is exact.** A unit whose factor involves π — the degree
-of arc, the oersted — does not go into the catalogue with a rounded decimal. It
-waits for symbolic factors. See D4 and section 8 of `CONCEPT.md`.
+**Every catalogue factor is exact, π included (D20).** A unit whose factor
+involves π — the degree of arc, the oersted, the parsec — carries the exponent
+beside the fraction, `{den: "180", pi: 1}`, never a rounded decimal. The
+exponents subtract on conversion, so a degree is exactly 3600 arcseconds and only
+a conversion crossing out of the π units puts digits in place of π. The digits
+live in `internal/pi`, they are checked against Machin's formula by the test next
+to them, and they run out: a crossing conversion above `pi.MaxPrecision − 10`
+digits returns a `PrecisionError` rather than fewer correct digits than it
+promises. Never add a unit with a pre-multiplied π — see D4 and D20.
 
 ## Commands
 

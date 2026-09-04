@@ -95,11 +95,14 @@ func (u unitSpec) dimension() exponents {
 	return u.quantity.Dimension
 }
 
-// factorSpec is the exact fraction relating a unit to the base unit (D4). Both
-// parts default to one, so a base unit omits the field entirely.
+// factorSpec is the exact relation between a unit and the base unit: a fraction
+// (D4) and the exponent of π where the definition has one (D20). All three
+// default — the fraction to one, the exponent to zero — so a base unit omits
+// the field entirely and a rational unit never mentions pi.
 type factorSpec struct {
 	Num string `yaml:"num"`
 	Den string `yaml:"den"`
+	Pi  int    `yaml:"pi"`
 }
 
 // symbolSpec describes how a unit prints. The forms mirror the constructors of
@@ -129,7 +132,7 @@ func (q quantity) name() string {
 // unitsDir is the directory the generated quantity packages live in, below the
 // module root: github.com/timzifer/metrology/units/pressure (D18). It is data,
 // and it is kept out of the module's own namespace so that the seven
-// hand-written packages are not lost among forty-three generated ones.
+// hand-written packages are not lost among forty-four generated ones.
 const unitsDir = "units"
 
 // importPath is where a generated package is imported from.

@@ -575,3 +575,44 @@ func TestExpressionIsNotSubstitutedAcrossScales(t *testing.T) {
 		})
 	}
 }
+
+// An expression that spells a unit this parser knows is that unit — but only
+// where the two are the same scale, and a power of π is part of a scale (D20).
+// A caller's catalogue may spell something "A/m" that is not an ampere per
+// metre, and substituting it would change the factor rather than name it.
+func TestExpressionDoesNotAdoptAUnitWithAnotherPiExponent(t *testing.T) {
+	ampere := metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.New(dimension.Exponents{ElectricCurrent: 1}),
+		Symbol:    symbol.SI("A"),
+	})
+	metre := metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.L, Symbol: symbol.SI("m"),
+	})
+	// Spelled like the quotient, and not the quotient: π/1 amperes per metre.
+	odd := metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.New(dimension.Exponents{Length: -1, ElectricCurrent: 1}),
+		Symbol:    symbol.Quotient(symbol.SI("A"), symbol.SI("m")),
+		Pi:        1,
+	})
+
+	p := parse.New([]metrology.Unit{ampere, metre, odd})
+
+	// The blank keeps the whole text from resolving, so this goes through the
+	// expression path and meets the unit spelled the same way.
+	got, err := p.Unit("A / m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pi := got.Factor().Pi; pi != 0 {
+		t.Errorf("the expression came back with π^%d, want the expression's own π^0", pi)
+	}
+
+	// Spelled in full it is the catalogue's unit, π and all.
+	named, err := p.Unit("A/m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pi := named.Factor().Pi; pi != 1 {
+		t.Errorf("the named unit came back with π^%d, want π^1", pi)
+	}
+}

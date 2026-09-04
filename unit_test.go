@@ -14,9 +14,9 @@ func TestNewUnitDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	num, den := u.Factor()
-	if num.String() != "1" || den.String() != "1" {
-		t.Errorf("factor = %s/%s, want 1/1", num, den)
+	f := u.Factor()
+	if f.Num.String() != "1" || f.Den.String() != "1" || f.Pi != 0 {
+		t.Errorf("factor = %s/%s·π^%d, want 1/1·π^0", f.Num, f.Den, f.Pi)
 	}
 	if got := u.Offset(); got.String() != "0" {
 		t.Errorf("offset = %s, want 0", got)
@@ -133,5 +133,41 @@ func TestIntervalUnit(t *testing.T) {
 	}
 	if !got.Equal(Kelvin) {
 		t.Errorf("interval unit = %s, want K", got)
+	}
+}
+
+// D20: the exponent is stored in an int8 and bounded by the same MaxPower the
+// dimension exponents are, so a definition past it is refused where it is
+// written rather than wrapped where it is used.
+func TestNewUnitRefusesAPiExponentOutOfRange(t *testing.T) {
+	for _, exponent := range []int{metrology.MaxPower + 1, -metrology.MaxPower - 1} {
+		_, err := metrology.NewUnit(metrology.UnitDef{
+			Dimension: dimension.One, Symbol: symbol.Static("x"), Pi: exponent,
+		})
+		if !errors.Is(err, metrology.ErrRange) {
+			t.Errorf("a π exponent of %d gave %v, want ErrRange", exponent, err)
+		}
+	}
+}
+
+// Two scales with the same fraction and different powers of π are two
+// different scales, and Equal has to say so. It may compare the exponents as
+// themselves because π is transcendental: πᵈ is rational only for d = 0, so no
+// pair of fractions can make up the difference (D20).
+func TestUnitsDifferingOnlyInTheirPiExponentAreNotEqual(t *testing.T) {
+	plain := metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.One, Symbol: symbol.Static("x"), Denominator: "180",
+	})
+	withPi := metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.One, Symbol: symbol.Static("x"), Denominator: "180", Pi: 1,
+	})
+	if plain.Equal(withPi) {
+		t.Error("1/180 and π/180 compare equal")
+	}
+	if !withPi.Equal(withPi) {
+		t.Error("a unit does not equal itself")
+	}
+	if got := withPi.Factor().Pi; got != 1 {
+		t.Errorf("Factor().Pi = %d, want 1", got)
 	}
 }

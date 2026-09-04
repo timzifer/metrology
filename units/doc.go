@@ -3,7 +3,7 @@
 //
 // It declares nothing itself. The units live one level down —
 // units/pressure.Bar, units/temperature.Celsius — and are imported from there;
-// this package exists so that the forty-three generated packages have a name
+// this package exists so that the forty-four generated packages have a name
 // as a group and do not sit beside the seven hand-written ones (D18).
 //
 // A quantity package is generated from catalog/catalog.yaml and never edited by

@@ -10,8 +10,9 @@
 # Brochure character by character, 133.32236842105263 cannot.
 #
 # Every factor here is exact. Where a unit is defined through π — the degree of
-# arc, the oersted — no exact decimal fraction exists, and the unit is left out
-# rather than rounded into the catalogue. See section 8 of CONCEPT.md.
+# arc, the oersted, the parsec — the entry carries the exponent of π beside the
+# fraction (D20) rather than a rounded decimal: {den: "180", pi: 1} is π/180 and
+# can be checked against the SI Brochure; 0.017453292519943295 cannot.
 #
 # Fields
 #
@@ -24,13 +25,14 @@
 #   units[].canonical       exactly one per dimension, kind and quantity
 #   units[].symbol          form: static | si | si_pow | gram | litre
 #                                 | product | quotient
-#   units[].factor          num/den, an exact fraction; both default to 1
+#   units[].factor          num/den, an exact fraction, both defaulting to 1,
+#                           and pi, the exponent of π, defaulting to 0 (D20)
 #   units[].offset          added before the factor; absolute units only
 #   units[].interval        the unit differences on this scale are read on
 #
 # Conversion to the base unit of the dimension is
 #
-#     base = (magnitude + offset) · num / den
+#     base = (magnitude + offset) · num / den · π^pi
 
 quantities:
   # ---------------------------------------------------------------- SI base --
@@ -69,7 +71,14 @@ quantities:
         source: SI Brochure 9th ed., §4.1 Table 8
 
   - package: length
-    doc: Length, the SI base quantity of extent.
+    doc: |
+      Length, the SI base quantity of extent.
+
+      The parsec is the one unit here whose factor is not rational: it is
+      648000/π astronomical units by definition, so the entry carries a π
+      exponent (D20) and 648000 · 149 597 870 700 as its numerator. The
+      astronomical unit is exact, and is here because the parsec is defined
+      against it.
     dimension: {length: 1}
     units:
       - id: metre
@@ -90,6 +99,18 @@ quantities:
         symbol: {form: static, text: "Å"}
         factor: {num: "1", den: "10000000000"}
         source: NIST SP 811 (2008), Appendix B.8
+      - id: astronomical_unit
+        go: AstronomicalUnit
+        doc: 149 597 870 700 metres exactly, a defined length since the IAU fixed it in 2012
+        symbol: {form: static, text: au}
+        factor: {num: "149597870700"}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: parsec
+        go: Parsec
+        doc: the distance at which one astronomical unit subtends one arcsecond, 648000/π au
+        symbol: {form: si, text: pc}
+        factor: {num: "96939420213600000", pi: -1}
+        source: IAU 2015 Resolution B2; NIST SP 811 (2008), Appendix B.8 gives 3.085 678 E+16 m
 
   - package: mass
     doc: Mass, the SI base quantity of inertia.
@@ -256,9 +277,10 @@ quantities:
       why it carries a quantity tag: without one, an angle and a bare number
       would be the same thing to the arithmetic (D6).
 
-      The degree of arc is not here. It is π/180 radians, and π has no exact
-      decimal fraction — a rounded factor in this catalogue would be exactly
-      what D4 forbids.
+      Every unit here but the radian is defined through π and carries the
+      exponent of D20. Between them the exponents cancel — a degree is exactly
+      3600 arcseconds and nothing rounds — and only a conversion to or from the
+      radian puts digits in place of π.
     dimension: {}
     quantity: plane angle
     units:
@@ -268,6 +290,30 @@ quantities:
         doc: the SI unit of plane angle
         symbol: {form: static, text: rad}
         source: SI Brochure 9th ed., §2.3.4 Table 4
+      - id: degree
+        go: Degree
+        doc: the degree of arc, π/180 radians, and a full turn in 360 of them
+        symbol: {form: static, text: "°"}
+        factor: {den: "180", pi: 1}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: arcminute
+        go: Arcminute
+        doc: a sixtieth of a degree
+        symbol: {form: static, text: "′"}
+        factor: {den: "10800", pi: 1}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: arcsecond
+        go: Arcsecond
+        doc: a sixtieth of an arcminute, and the angle a parsec is named for
+        symbol: {form: static, text: "″"}
+        factor: {den: "648000", pi: 1}
+        source: SI Brochure 9th ed., §4.1 Table 8
+      - id: gon
+        go: Gon
+        doc: the gon, also called the grad or the gradian, a right angle in a hundred of them
+        symbol: {form: static, text: gon}
+        factor: {den: "200", pi: 1}
+        source: NIST SP 811 (2008), Appendix B.8 (grade)
 
   - package: solidangle
     doc: |
@@ -526,6 +572,29 @@ quantities:
         doc: the CGS unit of magnetic flux density, a ten-thousandth of a tesla
         symbol: {form: static, text: G}
         factor: {num: "1", den: "10000"}
+        source: NIST SP 811 (2008), Appendix B.8
+
+  - package: fieldstrength
+    doc: |
+      Magnetic field strength, H: the field a current produces, as distinct from
+      the flux density B that the field produces in a material.
+
+      The oersted is 1000/4π amperes per metre, so its entry carries a π
+      exponent of −1 (D20) — the mirror image of the degree, which carries one
+      of +1. What a degree multiplies by, an oersted divides by.
+    dimension: {length: -1, electric_current: 1}
+    units:
+      - id: ampere_per_metre
+        go: AmperePerMetre
+        canonical: true
+        doc: the SI unit of magnetic field strength
+        symbol: {form: quotient, of: [{form: si, text: A}, {form: si, text: m}]}
+        source: SI Brochure 9th ed., §2.3.4 Table 3
+      - id: oersted
+        go: Oersted
+        doc: the CGS unit of magnetic field strength, 1000/4π amperes per metre
+        symbol: {form: static, text: Oe}
+        factor: {num: "1000", den: "4", pi: -1}
         source: NIST SP 811 (2008), Appendix B.8
 
   - package: inductance
