@@ -8,7 +8,7 @@ import (
 )
 
 // The five rules of D6, one case each. This table is the reason the kind
-// exists; if it ever disagrees with CONCEPT.md, one of the two is wrong and it
+// exists; if it ever disagrees with D6 in docs/decisions, one of the two is wrong and it
 // is not automatically this one.
 func TestKindRules(t *testing.T) {
 	for _, tc := range []struct {

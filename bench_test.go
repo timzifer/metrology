@@ -7,8 +7,8 @@ import (
 	"github.com/timzifer/metrology"
 )
 
-// The benchmarks behind the numbers in D9 and in the risk table of section 9 of
-// CONCEPT.md. Those documents quote a cost per conversion and a cost per
+// The benchmarks behind the numbers in D9 and in the risk table of
+// docs/deferred.md. Those documents quote a cost per conversion and a cost per
 // precision step; this file is what produces them, so the claim can be rechecked
 // on the machine of whoever doubts it rather than believed:
 //

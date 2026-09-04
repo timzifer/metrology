@@ -68,7 +68,7 @@ jobs:
 
       # The benchmarks assert nothing and are not a gate: one iteration per case
       # is enough to keep them compiling and running, so that the runtime-cost
-      # claims in CONCEPT.md and README.md keep a reproduction behind them. CI
+      # claims in docs/ and README.md keep a reproduction behind them. CI
       # timings on a shared runner mean nothing and are not recorded.
       - name: Benchmarks compile and run
         run: go test -run '^$' -bench . -benchtime 1x ./...

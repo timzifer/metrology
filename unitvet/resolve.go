@@ -102,7 +102,7 @@ func (c *checker) coreCall(call *ssa.CallCommon) (owner owned, name string, ok b
 		// buildssa runs with ssa.BuilderMode(0), so an instantiated generic
 		// method is a function of its own and names itself In[float64]. The
 		// rule is about In, whichever number it reads into (see the D13 entry
-		// in the verification log of CONCEPT.md).
+		// in docs/verification.md).
 		callee = origin
 	}
 	receiver := callee.Signature.Recv()

@@ -394,8 +394,7 @@ lookup — `m/s²` is a catalogue entry and never reaches it, `kg·m²/s³` does
 **Read the absolute figures as one machine's, and the ratios as the library's.**
 A shared cloud runner is not a measuring instrument; that is why the benchmarks
 are in the tree rather than only their output, and why CI runs them without
-recording a time. [D9 in
-CONCEPT.md](CONCEPT.md#d9--precision-belongs-to-the-computation-not-the-value)
+recording a time. [D9](docs/decisions/D09-precision-belongs-to-the-computation-not-the-value.md)
 has the cost per precision and why the default is 20 digits rather than
 decimal128.
 
@@ -424,17 +423,17 @@ The deliberate review of the exported surface that stood between `v0.x` and
 `v1.0.0` is complete: the composition methods `Times`, `Per`, `Pow`,
 `Prefixed`, `DecimalIn` and the `Engine` methods are all frozen, the error
 types keep their names and fields, and `parse.Text` stays the shape of the
-decoding boundary. The reasoning for each is recorded in [section 7 of
-CONCEPT.md](CONCEPT.md#7-state-and-the-road-to-v100). From `v1.0.0` on, a
+decoding boundary. The reasoning for each is recorded in [the state page of the
+documentation](docs/status.md). From `v1.0.0` on, a
 signature change anywhere in the module is a `v2`; additions remain free.
 
 ## Documentation
 
 - [pkg.go.dev](https://pkg.go.dev/github.com/timzifer/metrology) — the API, with
   runnable examples for everything a caller touches.
-- [CONCEPT.md](CONCEPT.md) — architecture, the twenty-one design decisions and
-  the reasoning behind them, what is deliberately deferred, and a verification
-  log with reproduction steps for every measured claim.
+- [docs/](docs/README.md) — architecture, the twenty-one design decisions and
+  the reasoning behind them, one page each, what is deliberately deferred, and a
+  verification log with reproduction steps for every measured claim.
 - [CLAUDE.md](CLAUDE.md) — invariants and conventions for anyone (human or agent)
   changing this code.
 

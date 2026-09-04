@@ -5,7 +5,7 @@
 // L²T⁻¹ is also the dimension of thermal diffusivity and of a diffusion
 // coefficient. Those are not in the catalogue, because they would print the
 // same symbol — m²/s — and the text form of D12 has to read back to one
-// unit. See section 8 of CONCEPT.md.
+// unit. See docs/deferred.md.
 package kinematicviscosity
 
 import (

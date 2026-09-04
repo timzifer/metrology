@@ -1,10 +1,11 @@
 # Working in this repository
 
-Read `CONCEPT.md` before making design choices. It holds the architecture and,
-more importantly, the reasoning — decisions are numbered D1 … D21 and referenced
-from code comments. If a change contradicts a decision, the decision gets updated
+Read `docs/README.md` before making design choices. The pages under `docs/`
+hold the architecture and, more importantly, the reasoning — decisions are
+numbered D1 … D21, one page each under `docs/decisions/`, and referenced from
+code comments. If a change contradicts a decision, the decision gets updated
 first, in the same pull request, with the reason. Silent divergence between
-`CONCEPT.md` and the code is the failure mode to avoid.
+`docs/` and the code is the failure mode to avoid.
 
 ## What this is
 
@@ -20,9 +21,9 @@ units of NIST SP 811 that process engineering uses — the text form of D12 read
 and writes (`metrology` writes, `parse` reads), `uncertainty` carries bounds
 instead of a point (D15), `gum` carries an uncertainty budget with the
 provenance of every contribution (D21), and `unitvet` checks dimensions
-statically per D13 over all three. The deliberate API review of section 7 of
-`CONCEPT.md` is complete — every item is settled there with its reasoning, and
-the whole exported surface is frozen at `v1.0.0`. Section 7 also records what
+statically per D13 over all three. The deliberate API review of
+`docs/status.md` is complete — every item is settled there with its reasoning, and
+the whole exported surface is frozen at `v1.0.0`. That page also records what
 is complete and what each subsystem is measured by.
 
 What is *not* open any more is the exported surface of `uncertainty` and `gum`:
@@ -201,7 +202,7 @@ go run ./tools/covercheck -profile coverage.out
 go build -o /tmp/unitvet ./cmd/unitvet
 go vet -vettool=/tmp/unitvet ./...
 
-# the benchmarks behind every runtime-cost claim in CONCEPT.md and README.md
+# the benchmarks behind every runtime-cost claim in docs/ and README.md
 go test -run '^$' -bench . -benchmem ./...
 ```
 
@@ -209,7 +210,7 @@ A benchmark asserts nothing and cannot fail; CI only runs it once per case to
 keep it compiling. If you change a runtime-cost claim in the documentation,
 change the benchmark that produces it in the same pull request — a quoted
 nanosecond figure with no benchmark behind it is the same failure mode as a
-`CONCEPT.md` that has drifted from the code.
+decision page that has drifted from the code.
 
 The `unitvet` corpus under `unitvet/testdata` is a module of its own with a
 `replace` back to the root — that is what lets it import the real quantity
@@ -254,7 +255,7 @@ error branch that cannot fire usually means the error cannot occur.
 - `Dimension` reserves 8 unused bits (D5). They are held for fractional
   exponents, which are deferred, not forgotten.
 - The default precision is deliberately modest, 20 significant digits. See D9 in
-  `CONCEPT.md` — the benchmark data is there; going higher costs measurably and
+  `docs/decisions/` — the benchmark data is there; going higher costs measurably and
   buys nothing for physical measurements. decimal128 is one `NewEngine(34)` away.
 - There is no swappable arithmetic and no float-backed fast mode, and there will
   not be one: D17 measures a facade over the operations as

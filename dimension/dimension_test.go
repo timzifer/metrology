@@ -7,7 +7,7 @@ import (
 	"github.com/timzifer/metrology/dimension"
 )
 
-// pressure is L⁻¹M¹T⁻², the dimension every example in CONCEPT.md uses.
+// pressure is L⁻¹M¹T⁻², the dimension every example in docs/ uses.
 var pressure = dimension.New(dimension.Exponents{Length: -1, Mass: 1, Time: -2})
 
 func TestNewRoundTripsEveryAxis(t *testing.T) {

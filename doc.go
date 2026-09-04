@@ -25,8 +25,9 @@
 // github.com/timzifer/metrology/parse, where a parser is a value holding the
 // units it knows.
 //
-// See CONCEPT.md in the repository root for the architecture and the reasoning
-// behind it. Design decisions are referenced throughout the code as D1 … D14.
+// See docs/README.md in the repository for the architecture and the reasoning
+// behind it. Design decisions are referenced throughout the code as D1 … D21,
+// one page each under docs/decisions.
 package metrology
 
 // The quantity packages and the catalogue index are generated from the YAML
