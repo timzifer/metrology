@@ -20,10 +20,10 @@ units of NIST SP 811 that process engineering uses — the text form of D12 read
 and writes (`metrology` writes, `parse` reads), `uncertainty` carries bounds
 instead of a point (D15), `gum` carries an uncertainty budget with the
 provenance of every contribution (D21), and `unitvet` checks dimensions
-statically per D13 over all three. What remains before `v1.0.0` are three items
-of the deliberate API review of section 7 of `CONCEPT.md`; until then the module
-is `v0.x` and the API may change. Section 7 also records what is complete and
-what each subsystem is measured by.
+statically per D13 over all three. The deliberate API review of section 7 of
+`CONCEPT.md` is complete — every item is settled there with its reasoning, and
+the whole exported surface is frozen at `v1.0.0`. Section 7 also records what
+is complete and what each subsystem is measured by.
 
 What is *not* open any more is the exported surface of `uncertainty` and `gum`:
 both layers ship inside `v1.0.0`, together with the `Engine.Rounding` and

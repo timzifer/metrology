@@ -2232,20 +2232,57 @@ Everything the decisions describe is implemented and enforced:
 | The `int64` fast path (D17) | **decided, not built.** It is additive and invisible in the API, so it does not gate `v1.0.0`; what D17 fixes is that there is no type parameter and no facade to build it behind |
 | `uncertainty` (D15) | complete; a conversion is asserted over the whole catalogue never to narrow a range and never to pull two overlapping ranges apart, the four-corner table of `Mul` and the even-power case of `Pow` are tested case by case, the aliasing guard of D3 covers both bounds at 200 digits, `FuzzRange` holds the text form to a fixed point, and the `unitvet` corpus asserts the reported and the silent cases over ranges as it does over measurements; its exported surface is inside `v1.0.0` |
 
-**What remains before `v1.0.0` is a deliberate API review**, and three of its
-items are still open. Until it happens the module is tagged `v0.x` and the API
-may change without notice; any stability
-promise made before the review is one to regret later. The review has to settle,
-at minimum — items already settled are struck through rather than deleted, so
-that a reader who remembers the question finds the answer where the question
-was:
+**The deliberate API review before `v1.0.0` is complete.** Every item it had
+to settle is settled below, on 2026-09-04, and nothing stands between the
+module and the tag. Until the review happened the module was tagged `v0.x` and
+the API could change without notice, because any stability promise made before
+it would have been one to regret later. The items are struck through rather
+than deleted, so that a reader who remembers the question finds the answer
+where the question was:
 
-- the exported surface of `metrology` — which of `Times`, `Per`, `Pow`, `Prefixed`,
-  `DecimalIn` and the `Engine` methods are load-bearing enough to freeze
-- the naming of the error types and their exported fields, since D11 makes those
-  the substitute for a compile error
-- whether `parse.Text` is the right shape for the decoding boundary, or whether a
-  parser-typed destination generated per catalogue would serve better
+- ~~the exported surface of `metrology` — which of `Times`, `Per`, `Pow`,
+  `Prefixed`, `DecimalIn` and the `Engine` methods are load-bearing enough to
+  freeze~~ — **settled: all of them.** The candidates for a cut were the ones a
+  caller can compose from something else, and each turns out to be the one
+  place a rule is enforced rather than a convenience. `Times`, `Per` and `Pow`
+  are where D12's one-spelling rule lives — `Symbol.Product` gathers a
+  repeated prefixable multiplicand into a power there and nowhere else, so a
+  caller building a derived unit by hand would get a second spelling of the
+  square metre. `Prefixed` is the other half of the `String`/`Prefixed` split of
+  D12: writing is a method, and a caller that wants the prefixed form has no
+  parser to get it from. `DecimalIn` is `In` without the numeric boundary — the
+  decimal the library computed rather than a `float64` or an `int64` cut from
+  it — and it is the one way to read an exact magnitude in a scale other than
+  the one the measurement carries without constructing a second `Measurement`
+  to take `Decimal` of; `unitvet` resolves it beside `To` and `In` for that
+  reason. The `Engine` methods are the arithmetic, `Cmp` and `To` under an
+  explicit precision, and every method on `Measurement` is the zero `Engine`
+  applied to the same operation (D9); dropping one from the `Engine` would
+  leave that operation with no way to run at another precision. Nothing in the
+  list is a duplicate of anything else, so nothing is cut
+- ~~the naming of the error types and their exported fields, since D11 makes
+  those the substitute for a compile error~~ — **settled: as built.** Seven
+  classes, one sentinel and one struct each, every struct with an `Op` field
+  naming the operation and the operands beside it — `Want`/`Got` on a
+  `DimensionError`, `Left`/`Right` on a `KindError` and a `QuantityError`,
+  `Requested`/`Max` on a `PrecisionError`, `Value`/`Type` on a `RangeError`,
+  `Input`/`Err` on a `SyntaxError` — and `NoScaleError` with `Op` alone, for the
+  reason D11 gives. The names say what a compile error would have said, in the
+  order it would have said it, and `errors.Is` reaches the class while
+  `errors.As` reaches the fields. No rename was found that a reader would have
+  needed
+- ~~whether `parse.Text` is the right shape for the decoding boundary, or
+  whether a parser-typed destination generated per catalogue would serve
+  better~~ — **settled: `parse.Text` is the shape.** A generated destination
+  type per catalogue would give every catalogue a type of its own to unmarshal
+  into, and that is one type per catalogue the caller has to name in every
+  struct that receives one — and a program with two catalogues, which D12's
+  reasoning is built around, would have two of them for one measurement. `Text`
+  carries the parser as a value instead, so the zero `Text` reads the shipped
+  catalogue, `Parser.Text` reads any other, and the field type is the same in
+  both cases. That is the value-not-registry rule of D7 applied to the decoding
+  boundary, and generating a type around it would have moved the choice of
+  catalogue from the value to the type without making it any more checkable
 - ~~what `Quantity` promises~~ — **settled, and kept here so the answers stay
   findable.** **Identity or interpretation?** Identity (D16): a hertz is not a
   becquerel, the run time refuses the conflict in every additive operation and

@@ -420,13 +420,13 @@ derivatives, and `EffectiveFreedom` without a t-table. Methods may still be
 added to either — an addition costs a caller nothing — but no signature there
 changes before a `v2`.
 
-The module is nevertheless tagged `v0.x`, and **the API may change until
-`v1.0.0`.** What stands between here and there are three points of a deliberate
-review of the exported surface, not missing functionality: which of the
-composition methods are load-bearing enough to freeze, the naming of the error
-types D11 makes a substitute for a compile error, and whether `parse.Text` is
-the right shape for the decoding boundary. They are listed in [section 7 of
-CONCEPT.md](CONCEPT.md#7-state-and-the-road-to-v100).
+The deliberate review of the exported surface that stood between `v0.x` and
+`v1.0.0` is complete: the composition methods `Times`, `Per`, `Pow`,
+`Prefixed`, `DecimalIn` and the `Engine` methods are all frozen, the error
+types keep their names and fields, and `parse.Text` stays the shape of the
+decoding boundary. The reasoning for each is recorded in [section 7 of
+CONCEPT.md](CONCEPT.md#7-state-and-the-road-to-v100). From `v1.0.0` on, a
+signature change anywhere in the module is a `v2`; additions remain free.
 
 ## Documentation
 
