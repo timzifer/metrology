@@ -18,6 +18,10 @@ import (
 // because an apd.Decimal shares its coefficient with every struct copy of
 // itself: one in-place write would silently corrupt every measurement derived
 // from it.
+//
+// The zero Measurement is not a measurement: it carries the zero [Unit], which
+// is not a scale, so every operation on it returns [ErrNoScale] — and
+// [Measurement.Equal], which has no error to return, answers false.
 type Measurement struct {
 	unit Unit
 	val  apd.Decimal
@@ -157,7 +161,7 @@ func (e Engine) To(m Measurement, u Unit) (Measurement, error) {
 	if !m.unit.quantity.compatible(u.quantity) {
 		return Measurement{}, &QuantityError{Op: "To", Left: m.unit.quantity, Right: u.quantity}
 	}
-	d, err := e.convert(&m.val, m.unit, u)
+	d, err := e.convert("To", &m.val, m.unit, u)
 	if err != nil {
 		return Measurement{}, err
 	}

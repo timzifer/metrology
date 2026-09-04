@@ -34,6 +34,13 @@
 // The zero Range is not a range: its unit is the zero [metrology.Unit], which
 // has no scale, exactly as the zero [metrology.Measurement] has none. Build one
 // with [Of], [Between] or [Symmetric], or read one with [Parse].
+//
+// Everything that has to read that scale — [Range.Width], [Range.To],
+// [Range.Pow], [Range.Overlaps] — answers [metrology.ErrNoScale] rather than
+// panicking. [Range.Mid] still answers, and the asymmetry is D15's rather than
+// an oversight: a midpoint is computed on the two magnitudes inside the one
+// scale, so it never asks the scale anything, where a width is a difference of
+// two points and is therefore read on an interval unit.
 package uncertainty
 
 import (

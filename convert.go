@@ -35,7 +35,14 @@ func (c *calc) do(_ apd.Condition, err error) {
 // An interval carries no offset: 5 K is 5 °C-worth of difference, and adding
 // 273.15 to a difference is the classic affine bug this kind system exists to
 // prevent (D6).
-func (e Engine) convert(v *apd.Decimal, from, to Unit) (*apd.Decimal, error) {
+func (e Engine) convert(op string, v *apd.Decimal, from, to Unit) (*apd.Decimal, error) {
+	// Before the fast path below, not after it. Equal answers true for two zero
+	// Units and for a zero Unit beside a constructed one that happens to render
+	// the same way, so a check placed under the fast path would let both
+	// through and return a magnitude read on no scale at all.
+	if !from.hasScale() || !to.hasScale() {
+		return nil, &NoScaleError{Op: op}
+	}
 	if from.Equal(to) {
 		// Not an optimisation: a conversion of a value to its own unit must
 		// return the value, and a division would round it to the engine's
@@ -65,7 +72,7 @@ func (e Engine) convert(v *apd.Decimal, from, to Unit) (*apd.Decimal, error) {
 		c.do(exact.Sub(result, result, to.offset))
 	}
 	if c.err != nil {
-		return nil, fmt.Errorf("metrology: convert %s to %s: %w", from, to, c.err)
+		return nil, fmt.Errorf("metrology: %s: convert %s to %s: %w", op, from, to, c.err)
 	}
 	// D9: without this the quotient is padded to the full precision with
 	// zeros, and 2.5 bar serialises as 250000.0000000000000000 Pa.

@@ -10,6 +10,7 @@ import (
 	"github.com/timzifer/metrology/units/interval"
 	"github.com/timzifer/metrology/units/length"
 	"github.com/timzifer/metrology/units/pressure"
+	"github.com/timzifer/metrology/units/ratio"
 	"github.com/timzifer/metrology/units/temperature"
 )
 
@@ -215,5 +216,41 @@ func TestSymmetricRefusesAPointTolerance(t *testing.T) {
 	const want = "metrology: Sub: interval and absolute: a point on a scale cannot be subtracted from a span along it"
 	if err.Error() != want {
 		t.Errorf("message is %q,\n           want %q", err, want)
+	}
+}
+
+// The zero Range holds the zero [metrology.Unit], which is not a scale: the
+// package doc says so, and this is what makes that true rather than a claim
+// about a value that used to panic instead.
+func TestZeroRangeHasNoScale(t *testing.T) {
+	var zero uncertainty.Range
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"a width", func() error { _, err := zero.Width(); return err }},
+		{"a conversion", func() error { _, err := zero.To(ratio.One); return err }},
+		{"a power", func() error { _, err := zero.Pow(2); return err }},
+		{"an overlap", func() error { _, err := zero.Overlaps(zero); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); !errors.Is(err, metrology.ErrNoScale) {
+				t.Errorf("error = %v, want ErrNoScale", err)
+			}
+		})
+	}
+
+	// Building a range out of two magnitudes on no scale still succeeds:
+	// Between asks whether the two bounds agree on a scale, not whether that
+	// scale is one anything can be read on, and the answer for two absences is
+	// that they agree.
+	if _, err := uncertainty.Between(metrology.Measurement{}, metrology.Measurement{}); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	// And Mid still answers, because it computes on the two magnitudes inside
+	// the one scale and never asks the scale anything (D15).
+	if _, err := zero.Mid(); err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 }

@@ -48,10 +48,18 @@ func (u Unit) Per(other Unit) (Unit, error) {
 // Pow returns the unit raised to the n-th power: the metre cubed is m³, the
 // second to the −1 is s⁻¹, and any unit to the 0 is the dimensionless one.
 //
+// Any unit, and not the zero [Unit], which is not one: the zeroth power needs
+// no factor and could have answered without reading it, but a rule with an
+// exception in it is a rule nobody remembers. It returns [ErrNoScale] like
+// every other power.
+//
 // The factor is raised exactly, by repeated multiplication rather than by a
 // logarithm: (101325/760)² is a fraction of two integers and stays one (D4).
 // As with [Unit.Times] the result carries neither kind nor quantity.
 func (u Unit) Pow(n int) (Unit, error) {
+	if !u.hasScale() {
+		return Unit{}, &NoScaleError{Op: "Pow"}
+	}
 	if u.kind == Absolute {
 		return Unit{}, &KindError{
 			Op: "Pow", Left: u.kind, Right: u.kind,
@@ -104,7 +112,17 @@ func powExact(d *apd.Decimal, n int) *apd.Decimal {
 
 // intervalUnits rejects composing a scale whose zero is a convention (D6): the
 // square of 20 °C is not 400 of anything, and neither is 20 °C per second.
+//
+// It is the check behind [Unit.Times] and [Unit.Per] and behind
+// [Measurement.Mul] and [Measurement.Div], which is why it takes units rather
+// than measurements: the four ask the same question and one wording of the
+// answer is one place for it to be wrong.
 func intervalUnits(op string, left, right Unit) error {
+	if !left.hasScale() || !right.hasScale() {
+		// Asked before the kind, because "is this a unit at all" is the coarser
+		// mistake, the way sameQuantity asks for the dimension before the tag.
+		return &NoScaleError{Op: op}
+	}
 	if left.kind == Absolute || right.kind == Absolute {
 		return &KindError{
 			Op: op, Left: left.kind, Right: right.kind,

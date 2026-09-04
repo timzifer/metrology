@@ -64,6 +64,18 @@ var (
 		Dimension: dimension.Θ, Symbol: symbol.Static("°R"),
 		Numerator: "5", Denominator: "9",
 	})
+
+	// Dimensionless: the only dimension the zero Unit shares, and therefore the
+	// only one an addition or a conversion involving it gets far enough to
+	// reject for having no scale rather than for a dimension mismatch.
+	One = metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.One, Symbol: symbol.Static("1"),
+	})
+	// Unnamed is dimensionless and unspelled, which makes it the one built unit
+	// that agrees with the zero Unit on dimension, kind, quantity and symbol —
+	// so it is what drives Unit.Equal past those four onto the comparison of
+	// the factors themselves.
+	Unnamed = metrology.MustUnit(metrology.UnitDef{Dimension: dimension.One})
 )
 
 var (

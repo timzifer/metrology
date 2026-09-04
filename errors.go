@@ -47,6 +47,12 @@ var (
 	// type, or one that a numeric type cannot represent at all. See
 	// [RangeError].
 	ErrRange = errors.New("value out of range for the target type")
+
+	// ErrNoScale reports the zero [Unit], which no constructor produced: it
+	// carries no factor and no offset, so there is nothing to read a magnitude
+	// on. It is what a caller who ignored an error and went on computing gets,
+	// because every failed operation returns the zero value. See [NoScaleError].
+	ErrNoScale = errors.New("unit has no scale")
 )
 
 // errNotDecimal is what a [SyntaxError] wraps where the text has the wrong
@@ -122,6 +128,23 @@ func (e *SyntaxError) Is(target error) bool { return target == ErrSyntax }
 
 // Unwrap exposes the underlying parser error.
 func (e *SyntaxError) Unwrap() error { return e.Err }
+
+// NoScaleError names the operation that was handed the zero [Unit].
+//
+// Unlike the other classes it names no operands, and that is deliberate: the
+// zero Unit renders as the empty string, so a message quoting it would read
+// "expected , got " and say less than none at all.
+type NoScaleError struct {
+	Op string // the operation that failed: "Add", "Mul", "Pow", …
+}
+
+func (e *NoScaleError) Error() string {
+	return fmt.Sprintf("metrology: %s: the zero Unit has no scale; "+
+		"build one with NewUnit or take one from a quantity package", e.Op)
+}
+
+// Is reports that every NoScaleError matches [ErrNoScale].
+func (e *NoScaleError) Is(target error) bool { return target == ErrNoScale }
 
 // RangeError reports a magnitude that the requested numeric type cannot hold.
 //
