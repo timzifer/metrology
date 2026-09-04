@@ -20,7 +20,7 @@ var ErrInput = errors.New("not a usable input")
 // the name the caller gave the input rather than only the rule it broke — a
 // budget with nine inputs needs to say which one.
 type InputError struct {
-	Op   string // the operation that failed: "Of", "Correlated", "Sample"
+	Op   string // the operation that failed, e.g. "Of", "Sample" or "FromExpanded"
 	Name string // the caller's name for the input, where it gave one
 	Why  string // what was wrong, in words
 }

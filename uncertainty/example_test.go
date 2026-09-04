@@ -6,6 +6,9 @@ import (
 	"fmt"
 
 	"github.com/timzifer/metrology"
+	"github.com/timzifer/metrology/dimension"
+	"github.com/timzifer/metrology/parse"
+	"github.com/timzifer/metrology/symbol"
 	"github.com/timzifer/metrology/uncertainty"
 	"github.com/timzifer/metrology/units/interval"
 	"github.com/timzifer/metrology/units/length"
@@ -196,4 +199,100 @@ func ExampleRange_Add() {
 	// Output:
 	// [24.5, 25.5] °C <nil>
 	// true
+}
+
+// A midpoint is a point and not a bound, so it rounds the way D9 rounds every
+// other point. It is taken on the two magnitudes inside the one scale the
+// bounds share, because the sum of two absolute magnitudes is not a magnitude
+// (D6) and an affine map preserves midpoints anyway.
+func ExampleRange_Mid() {
+	warm, _ := uncertainty.Parse("[19.5, 20.5] °C")
+	fmt.Println(warm.Mid())
+
+	// Rounding to nearest can put the midpoint outside a range narrower than
+	// the engine's precision. Where the answer has to be an enclosure, it comes
+	// from Lo and Hi, which round outward.
+	narrow, _ := uncertainty.Parse("[0.999, 0.9999] m")
+	fmt.Println(uncertainty.NewEngine(1).Mid(narrow))
+	// Output:
+	// 20 °C <nil>
+	// 1 m <nil>
+}
+
+// A width is a difference of two points, which D6 already makes a span — so it
+// is read on the interval unit the scale declares, and the width of 20 … 21 °C
+// is 1 K rather than 1 °C. It rounds toward +∞, because a width reported too
+// small is a claim the data does not support.
+func ExampleRange_Width() {
+	warm, _ := uncertainty.Parse("[20, 21] °C")
+	fmt.Println(warm.Width())
+
+	measured, _ := uncertainty.Parse("[2.5, 2.6] bar")
+	fmt.Println(measured.Width())
+	// Output:
+	// 1 K <nil>
+	// 0.1 bar <nil>
+}
+
+// The even power of an interval that straddles zero is where an interval stops
+// being a pair of numbers one can compute with separately: its minimum is at
+// zero, which is at neither bound.
+func ExampleRange_Pow() {
+	r, _ := uncertainty.Parse("[-2, 3] m")
+	fmt.Println(r.Pow(2))
+
+	// A negative power is the reciprocal of the positive one, so an interval
+	// covering zero has none: the quotient runs to infinity in both directions
+	// and no pair of finite bounds encloses it.
+	_, err := r.Pow(-1)
+	fmt.Println(errors.Is(err, uncertainty.ErrUnbounded))
+	// Output:
+	// [0, 9] m² <nil>
+	// true
+}
+
+// Reading a symbol needs a catalogue and a catalogue is context (D7), so a
+// Parser is a value rather than a registry: a program with units of its own
+// builds one over its own [parse.Parser], and the shipped units are what the
+// zero Parser reads.
+func ExampleNew() {
+	widget := metrology.MustUnit(metrology.UnitDef{
+		Dimension: dimension.One,
+		Symbol:    symbol.Static("widget"),
+	})
+	mine := uncertainty.New(parse.New([]metrology.Unit{widget}))
+
+	fmt.Println(mine.Range("[1, 2] widget"))
+
+	// A catalogue of one unit does not read the metre, and the shipped
+	// catalogue does not read a widget.
+	_, err := mine.Range("[1, 2] m")
+	fmt.Println(errors.Is(err, parse.ErrUnknownUnit))
+	_, err = uncertainty.Parse("[1, 2] widget")
+	fmt.Println(errors.Is(err, parse.ErrUnknownUnit))
+	// Output:
+	// [1, 2] widget <nil>
+	// true
+	// true
+}
+
+// A NUMERIC column carries a magnitude and the schema carries the unit. In
+// says which unit a bare number is on, and a number is a range of zero width —
+// which is what an exact value in such a column means.
+func ExampleText_In() {
+	column := uncertainty.Text{}.In(pressure.Bar)
+	if err := column.Scan("2.5"); err != nil {
+		panic(err)
+	}
+	fmt.Println(column.Range)
+
+	// A text that names its own unit is still read as one, so a column that
+	// grew a unit does not have to be read differently.
+	if err := column.Scan("[2.5, 2.6] kPa"); err != nil {
+		panic(err)
+	}
+	fmt.Println(column.Range)
+	// Output:
+	// [2.5, 2.5] bar
+	// [2.5, 2.6] kPa
 }

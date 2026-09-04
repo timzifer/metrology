@@ -115,17 +115,26 @@ func Of(m metrology.Measurement) Range {
 // A lower bound above the upper one is an error rather than a silent swap. It
 // is almost always a caller's mistake, and a layer that quietly repaired it
 // would hide the mistake in a value that looks fine.
-func Between(lo, hi metrology.Measurement) (Range, error) {
+func Between(lo, hi metrology.Measurement) (Range, error) { return between("Between", lo, hi) }
+
+// between is Between under the name of whichever constructor the caller
+// actually called.
+//
+// D11 makes an error message the substitute for a compile error, and the
+// operation it names has to be the one in the caller's source: a range built
+// with Symmetric that comes out reversed is a Symmetric that failed, and
+// reporting "Between" would send the reader to a call that is not there.
+func between(op string, lo, hi metrology.Measurement) (Range, error) {
 	if lo.Dimension() != hi.Dimension() {
-		return Range{}, &metrology.DimensionError{Op: "Between", Want: lo.Dimension(), Got: hi.Dimension()}
+		return Range{}, &metrology.DimensionError{Op: op, Want: lo.Dimension(), Got: hi.Dimension()}
 	}
 	if !lo.Unit().Equal(hi.Unit()) {
-		return Range{}, &ScaleError{Op: "Between", Lower: lo.Unit(), Upper: hi.Unit()}
+		return Range{}, &ScaleError{Op: op, Lower: lo.Unit(), Upper: hi.Unit()}
 	}
 	// One scale, so the magnitudes compare as they are written: no conversion,
 	// nothing to round, and no error a caller could act on.
 	if lo.Decimal().Cmp(hi.Decimal()) > 0 {
-		return Range{}, &ReversedError{Op: "Between", Lower: lo.String(), Upper: hi.String()}
+		return Range{}, &ReversedError{Op: op, Lower: lo.String(), Upper: hi.String()}
 	}
 	return newRange(lo, hi), nil
 }
@@ -145,7 +154,7 @@ func Symmetric(m, tol metrology.Measurement) (Range, error) {
 	if err != nil {
 		return Range{}, err
 	}
-	return Between(lo, hi)
+	return between("Symmetric", lo, hi)
 }
 
 // Unit returns the scale both bounds are read on.

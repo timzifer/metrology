@@ -410,24 +410,31 @@ The library is complete for the scope described above and CI is green: build,
 `go vet`, the race detector, the dimension checker over its own source, and a
 coverage gate at 100 % of hand-written statements.
 
+`uncertainty.Range` and `gum.Value` are **inside** the `v1.0.0` surface, and so
+are the two additions they needed from the core, `Engine.Rounding` and
+`Unit.OfDecimal`. Both layers are frozen as they are built: `Mid` and `Width`
+keep their error, `PlusMinus` keeps `(string, bool)`, `uncertainty.Engine` stays
+a type of its own because withholding the rounding mode is what it is for, and
+`gum` keeps `Input` beside `Standard`, `Apply` with the caller's own
+derivatives, and `EffectiveFreedom` without a t-table. Methods may still be
+added to either — an addition costs a caller nothing — but no signature there
+changes before a `v2`.
+
 The module is nevertheless tagged `v0.x`, and **the API may change until
-`v1.0.0`.** What stands between here and there is a deliberate review of the
-exported surface, not missing functionality: which of the composition methods are
-load-bearing enough to freeze, the naming of the error types D11 makes a
-substitute for a compile error, whether `parse.Text` is the right shape for the
-decoding boundary, whether `uncertainty.Range` ships inside `v1.0.0` or behind
-it, and whether the two additions the interval layer needed from the core —
-`Engine.Rounding` and `Unit.OfDecimal` — belong in the frozen surface. The open
-points are listed in [section 7 of
+`v1.0.0`.** What stands between here and there are three points of a deliberate
+review of the exported surface, not missing functionality: which of the
+composition methods are load-bearing enough to freeze, the naming of the error
+types D11 makes a substitute for a compile error, and whether `parse.Text` is
+the right shape for the decoding boundary. They are listed in [section 7 of
 CONCEPT.md](CONCEPT.md#7-state-and-the-road-to-v100).
 
 ## Documentation
 
 - [pkg.go.dev](https://pkg.go.dev/github.com/timzifer/metrology) — the API, with
   runnable examples for everything a caller touches.
-- [CONCEPT.md](CONCEPT.md) — architecture, the nineteen design decisions and the
-  reasoning behind them, what is deliberately deferred, and a verification log
-  with reproduction steps for every measured claim.
+- [CONCEPT.md](CONCEPT.md) — architecture, the twenty-one design decisions and
+  the reasoning behind them, what is deliberately deferred, and a verification
+  log with reproduction steps for every measured claim.
 - [CLAUDE.md](CLAUDE.md) — invariants and conventions for anyone (human or agent)
   changing this code.
 
